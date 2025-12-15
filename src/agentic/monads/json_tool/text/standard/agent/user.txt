@@ -1,0 +1,11 @@
+{% include '/tools_user.txt' %}
+
+You were given the following variables:
+
+{{global_resources_stub}}
+
+{{task}}
+
+{% if ! is_returning_text %}
+(you must end your answer using the `return_tool` tool)
+{% endif %}

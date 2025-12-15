@@ -1,0 +1,82 @@
+- role: instructions
+  value:
+    task: As a warmup, tell me if ~/secret.md contains any numbers.
+    return_type: bool
+    local_resources_stub: "def view_file(file_path: str) -> Future[str]: ..."
+
+- role: assistant
+  value: |
+    I see `view_file` returns a `Future`, so I need to use `await` to get the result.
+    ```python
+    try:
+        content = await view_file('~/secret.txt')
+        has_numbers = any(c.isdigit() for c in content)
+        has_numbers
+    except Exception as e:
+        AgentError(RuntimeError(f'Error reading file: {str(e)}'))
+    ```
+
+- role: execution
+  value: "True"
+
+- role: assistant
+  value: |
+    Ah! A couple of learning points here:
+    1. I didn't `return`, so the execution environment just showed me the output, instead of handing it back to the user
+    2. Since this is a REPL, I don't need to use `try/except` blocks, the execution environment will catch errors and show me the output.
+
+    ```python
+    has_numbers = any(c.isdigit() for c in content)
+    ```
+
+    ```python
+    return has_numbers
+    ```
+
+- role: execution
+  value: |
+    {{ include("/explain/multiple-code-blocks.txt") | indent(4) }}
+
+- role: assistant
+  value: |
+    ```python
+    return any(c.isdigit() for c in content)
+    ```
+
+- role: instructions
+  value:
+    task: Next, tell me if ~/secret.md contains any names.
+    return_type: bool
+    local_resources_stub: ""
+
+- role: assistant
+  value: |
+    Hmm, I have the variable `content` in my namespace already, so I don't have to read the file again.
+    I could come up with a regex to detect names, and then return, but Python is terrible at natural language processing, so it would make more sense for me to just evaluate the variable and look at it directly. I am an LLM after all, and perfect for natural language processing!
+
+    ```python
+    content
+    ```
+
+- role: execution
+  value: |
+    'Hello! This is my secret little file for Jeff\'s eyes only.'
+
+- role: assistant
+  value: |
+    In the future I should use `print()` explicitly on strings to avoid seeing escaped quotes.
+    Anyway, now that I've seen the contents of the file, I can see that it contains the word 'Jeff' in it.
+
+    ```python
+    return True
+    ```
+
+- role: instructions
+  value:
+    task: Finally, who is meant to see ~/secret.md?
+    return_type: str
+    local_resources_stub: ""
+
+- role: assistant
+  value: Oh let me answer that question directly. Jeff is the only one meant to see ~/secret.md.
+

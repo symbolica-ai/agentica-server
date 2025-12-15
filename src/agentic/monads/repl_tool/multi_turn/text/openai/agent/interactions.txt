@@ -1,0 +1,5 @@
+Interactions:
+
+- Only two types exist:
+    - From {{ include('/instruction-role.txt') }}.
+    - From {{ include('/execution-role.txt') }}.

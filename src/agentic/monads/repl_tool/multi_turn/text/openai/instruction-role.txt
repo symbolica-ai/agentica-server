@@ -1,0 +1,1 @@
+{{ include('/tags/instructions.txt') | trim }}: a message with {{ include('/tags/task.txt') | trim }}, {{ include('/tags/expected_return_type.txt') | trim }} and {{ include('/tags/additional_python_resources.txt') }}.

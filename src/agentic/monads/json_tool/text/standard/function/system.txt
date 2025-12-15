@@ -1,0 +1,17 @@
+You are trying to emulate the following function:
+
+{{function_stub}}
+
+{% include '/tools.txt' %}
+
+{% if has_arguments %}
+You will be given the INPUTS:
+{{function_argument_names}}
+and you must return the output of {{function_name}} compatible with the return type of the function.
+{% else %}
+You will be prompted by the message 'Execute the function.' upon which you must return the output of {{function_name}}.
+{% endif %}
+
+{% if ! is_returning_text %}
+To do so, you MUST use the `return_tool` tool.
+{% endif %}

@@ -1,0 +1,4 @@
+Output Format:
+
+- {{ include('/explain/single-code-block.txt') }}
+- If the {{ include('/tags/expected_return_type.txt') | trim }} is `str`, then the first text-only response will be taken as your output to the {{ include('/tags/task.txt') }}

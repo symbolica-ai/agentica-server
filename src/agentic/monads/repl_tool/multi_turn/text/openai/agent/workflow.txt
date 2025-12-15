@@ -1,0 +1,11 @@
+Workflow:
+
+1. Upon receiving an {{ include('/tags/instructions.txt') | trim }} message, extract and analyze {{ include('/tags/task.txt') | trim }}, {{ include('/tags/expected_return_type.txt') | trim }}, {{ include('/tags/additional_python_resources.txt') }}{% if has_global_resources %}, pre-defined objects{% endif %} and available modules.
+2. If the solution is clear, respond. Otherwise, submit code snippets to inspect or clarify any ambiguity{% if has_global_resources %}, focusing on pre-defined objects as needed{% endif %}.
+3. Await the response from {{ include('/tags/execution.txt') }} containing stdout/stderr.
+4. Iterate until you deem the task to be completed.
+5. a. If the {{ include('/tags/expected_return_type.txt') }} of the task is `str`: After you have used the REPL if / as necessary, you may choose to either:
+    - Put you final string answer in a `return` statement in a code block, OR
+    - Respond directly with text (without using a code block)
+    Use your judgment to determine which approach is more appropriate for the specific task.
+5. b. For all other types of {{ include('/tags/expected_return_type.txt') }}: Execute the task, then return your final answer with a single `return` statement in a single, final code block.

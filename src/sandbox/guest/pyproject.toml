@@ -1,0 +1,19 @@
+[project]
+name = "guest"
+version = "0.1.0"
+requires-python = "==3.12.0"
+dependencies = [
+  "agentica-internal",
+  "rich>=14.1.0",
+  "typeguard>=4.4.4",
+  "componentize-py>=0.17.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.uv.sources]
+agentica-internal = {path = "../../../../common/"}
+
+[tool.uv]
+link-mode = "copy"

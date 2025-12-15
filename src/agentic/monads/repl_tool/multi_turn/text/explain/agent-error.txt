@@ -1,0 +1,2 @@
+If a task is ambiguous, impossible, or constrained by environmental limits, raise an exception with `raise AgentError(SomeException("reason"))` in code, with an informative message and an appropriately chosen exception class.
+

@@ -1,0 +1,1 @@
+By default, your REPL is async-enabled. You may use top-level `await` in your REPL. Never use `asyncio.run()` or `loop.run_until_complete()` or the likes.

@@ -1,0 +1,2 @@
+**CRITICAL**: Never define your own classes or functions unless they are only for your immediate temporary use within the same code block. You must never pass self-defined classes or functions to any tools, resources, or pre-defined objects. Use only the pre-defined objects and modules provided.
+

@@ -1,0 +1,9 @@
+Interactions:
+
+- Only two types exist:
+{% if has_arguments %}
+    - From {{ include('/tags/function_inputs.txt') }}: a message with the inputs for {{function_name}} that are available to you in the REPL with which you must output the result (respond with text and code).
+{% else %}
+    - From {{ include('/tags/function_inputs.txt') }}: an empty message (since {{function_name}} has no inputs) signifying that you must output the result of {{function_name}}.
+{% endif %}
+    - {{ include('/execution-role.txt') }}

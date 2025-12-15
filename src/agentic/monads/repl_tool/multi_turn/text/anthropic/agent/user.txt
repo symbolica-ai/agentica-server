@@ -1,0 +1,15 @@
+{% if task %}
+<task>
+  {{ task | trim | indent(2) }}
+</task>
+{% endif %}
+<additional-python-resources>
+{% if has_local_resources %}
+  {{ local_resources_stub | trim | indent(2) }}
+{% else %}
+  There are no additional Python resources.
+{% endif %}
+</additional-python-resources>
+<expected-return-type>
+  {{return_type | trim | indent(2) }}
+</expected-return-type>

@@ -1,0 +1,6 @@
+{% include '/tools_system.txt' %}
+
+
+{% if ! is_returning_text %}
+When you are finished, you MUST use the `return_tool` to return your answer to the user.
+{% endif %}

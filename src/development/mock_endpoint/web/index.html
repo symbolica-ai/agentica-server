@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mock Inference UI</title>
+    <link rel="stylesheet" href="/mock/ui/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Human-in-the-loop Inference</h1>
+        <p>Respond to pending chat completion requests.</p>
+      </header>
+
+      <main>
+        <aside class="requests">
+          <h2>Pending</h2>
+          <ul id="pending-list"></ul>
+        </aside>
+        <section class="workspace">
+          <div id="details" class="details hidden">
+            <div class="meta">
+              <span><strong>Model:</strong> <span id="meta-model"></span></span>
+              <span><strong>Stop:</strong> <span id="meta-stop"></span></span>
+              <span><strong>Max tokens:</strong> <span id="meta-max"></span></span>
+            </div>
+            <div class="tabs">
+              <button id="toggle-view" class="tab">JSON view</button>
+              <div class="spacer"></div>
+              <select id="status-select">
+                <option value="200" selected>200 OK</option>
+                <option value="300">300</option>
+                <option value="400">400</option>
+                <option value="500">500</option>
+              </select>
+            </div>
+            <div id="tab-transcript" class="tabpane active">
+              <div id="transcript" class="transcript"></div>
+            </div>
+            <div id="tab-request" class="tabpane">
+              <pre id="request-json" class="sent-viewer"></pre>
+            </div>
+          </div>
+          <div id="empty" class="empty">Select a pending request to respond.</div>
+        </section>
+        <aside class="sent">
+          <h2>Sent Responses</h2>
+          <ul id="sent-list"></ul>
+          <pre id="sent-viewer" class="sent-viewer"></pre>
+        </aside>
+      </main>
+    </div>
+    <script src="/mock/ui/main.js"></script>
+  </body>
+  </html>
+
+

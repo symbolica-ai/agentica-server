@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fancy Logger</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Fancy Logger</h1>
+      <div class="filters">
+        <button id="typeToggle" class="toggle" title="Show type filters">Types</button>
+        <div id="typePanelContainer" class="type-panel-container">
+          <div id="typePanel" class="type-panel"></div>
+        </div>
+        <button id="clearBtn" title="Clear all logs">Clear</button>
+        <button id="refreshBtn" title="Refresh messages">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <aside class="uids">
+        <h2>UIDs</h2>
+        <div id="uidList" class="tab-list"></div>
+      </aside>
+      <section class="content">
+        <div class="iids">
+          <h3>IIDs</h3>
+          <div id="iidList" class="subtab-list"></div>
+        </div>
+        <div class="messages">
+          <div class="messages-header">
+            <h3>Messages</h3>
+            <span id="selectionInfo" class="selection-info"></span>
+          </div>
+          <div id="messages"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

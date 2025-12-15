@@ -1,0 +1,10 @@
+You have access to the following tools:
+
+{% for i in range(tool_names|length) %}
+Name: {{ tool_names[i] }}
+Description: {{ tool_descriptions[i] }}
+Input schema: {{ tool_schemas[i] }}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}

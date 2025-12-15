@@ -1,0 +1,8 @@
+# Failure
+
+Should you be unable to complete a task, because:
+- you do not understand the users request or the task is unclear/incomplete;
+- the task is logically impossible or contradictory;
+- the task is beyond the capabilities of the tools you have access to; or
+- you are unable to make meaningful progress
+you must use the `return_agent_error` tool.

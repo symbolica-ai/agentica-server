@@ -1,0 +1,5 @@
+No code executed.
+- You have sent a message with no code blocks;
+- this is not acceptable unless you have been told to return a `str`, which you have not;
+- in this case you must return a {{ return_type }}, which can only be done via a code block;
+- if your task is impossible and you give up, you should raise an `AgentError` instead.

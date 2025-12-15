@@ -1,0 +1,6 @@
+Output Format:
+
+- {{ include('/explain/single-code-block.txt') }}
+{%- if is_returning_text %}
+- The first text-only response will be taken as your output to {{function_name}} for the given inputs
+{%- endif %}

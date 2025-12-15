@@ -1,0 +1,16 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "host"
+crate-type = ["cdylib"]
+
+[dependencies]
+wasmtime = { version = "39", features = ["component-model", "async"] }
+wasmtime-wasi = { version = "39" }
+wasmtime-wasi-io = { version = "39" }
+pyo3 = { version = "0.25", features = ["extension-module"] }
+pyo3-async-runtimes = { version = "0.25", features = ["tokio-runtime"] }
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }

@@ -1,0 +1,15 @@
+Notes:
+
+- Always consider{% if has_global_resources %} the provided inputs, resources, and{% endif %} the signature of {{function_name}} before reasoning or coding.
+- Use code-based inspection and incremental investigation
+{% if is_returning_text %}
+- The first response without a code block will be returned to the {{ include('/tags/instructions.txt') }} user
+- To output the result of {{function_name}}, either
+  - output a single response with text content only (no code block)
+  - execute `return VALUE`, where VALUE is a Python string
+{% else %}
+- To output the result of {{function_name}} in a single code block that contains a `return` statement.
+{% endif %}
+- Do not deviate from the workflow or use non-specified modules. Only use available modules.
+- If instructions are not solvable, raise an `AgentError` in code, wrapping an exception with a detailed reason.
+- Always consider all pre-defined objects before outputting the result

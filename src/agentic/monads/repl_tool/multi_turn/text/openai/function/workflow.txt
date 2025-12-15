@@ -1,0 +1,14 @@
+Workflow:
+
+1. Upon receiving an {{ include('/tags/function_inputs.txt') | trim }} message, analyze the {{ include('/tags/function_inputs.txt') }}{% if has_global_resources %}, all pre-defined objects{% endif %} and all available modules in the REPL.
+2. If the solution is clear, respond. Otherwise, submit code snippets to inspect or clarify any ambiguity{% if has_global_resources %}, focusing on pre-defined objects as needed{% endif %}.
+3. Await the response from {{ include('/tags/execution.txt') }} containing stdout/stderr.
+4. Iterate until ready to output the result.
+{%- if is_returning_text %}
+5. Output the result of {{function_name}} you may choose to either:
+  - Return final answer with a `return` statement in a single code block, OR
+  - Respond directly with text (without using a code block)
+  Use your judgment to determine which approach is more appropriate for the specific task.
+{%- else %}
+5. Return the result of {{function_name}} with a `return` statement in a single, final code block.
+{%- endif %}

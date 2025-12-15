@@ -1,0 +1,3 @@
+<function-inputs>
+  {{ inputs_stub | trim | indent(2) }}
+</function-inputs>

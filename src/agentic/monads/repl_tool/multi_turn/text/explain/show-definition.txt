@@ -1,0 +1,2 @@
+Inspect unfamiliar objects using `show_definition(_: Any)` (at most once per code block), unless you already know their definitions. Note that `show_definition` takes in the genuine Python runtime value you want to inspect.
+

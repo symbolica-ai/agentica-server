@@ -1,0 +1,7 @@
+!build/
+build/_tooling/
+build/deps/
+auto_gen/*
+*.wasm
+*.compiled
+*.egg-info

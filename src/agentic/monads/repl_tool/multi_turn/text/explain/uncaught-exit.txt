@@ -1,0 +1,2 @@
+You may not exit the session without returning result or raising an exception.
+

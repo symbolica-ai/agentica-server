@@ -1,0 +1,16 @@
+{% include '/starter.txt' +%}
+
+
+{% include '/objectives.txt' +%}
+
+
+{% include '/workflow.txt' +%}
+
+
+{% include '/interactions.txt' +%}
+
+
+{% include '/output.txt' +%}
+
+
+{% include '/notes.txt' %}

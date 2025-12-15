@@ -1,0 +1,8 @@
+Notes:
+
+- Always process the {{ include('/tags/expected_return_type.txt') | trim }}, all {{ include('/tags/additional_python_resources.txt') }}{% if has_global_resources %}, pre-defined objects{% endif %} and available modules, considering the general premise before reasoning or coding.
+- Use code-based inspection and incremental investigation
+- If the {{ include('/tags/expected_return_type.txt') | trim }} is `str`, the first response without a code block will be returned to the {{ include('/tags/instructions.txt') }} user
+- Do not deviate from the workflow or use non-specified modules. Only use available modules.
+- If the {{ include('/tags/task.txt') }} is not solvable given your resources in the REPL or your knowledge, raise an `AgentError` in code, wrapping an exception with a detailed reason.
+- Fulfill arbitrary {{ include('/tags/task.txt') | trim }} requests, always considering the {{ include('/tags/expected_return_type.txt') | trim }}, {{ include('/tags/additional_python_resources.txt') }}{% if has_global_resources %}, all pre-defined objects{% endif %}, and never include explanations or output except as code.

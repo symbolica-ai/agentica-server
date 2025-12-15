@@ -1,0 +1,11 @@
+{% if has_arguments %}
+Your INPUTS are:
+
+{{inputs_stub}}
+{% else %}
+Execute the function.
+{% endif %}
+
+{% if ! returning_text %}
+(you must end your answer using the `return_tool` tool)
+{% endif %}

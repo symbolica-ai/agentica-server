@@ -1,0 +1,22 @@
+# Exclude build artifacts that shouldn't be copied to Docker container
+**/.venv/
+**/_tooling/
+**/__pycache__/
+**/*.wasm
+**/*.tar.gz
+**/build/
+
+# Exclude development files
+**/.DS_Store
+**/.pytest_cache/
+**/.ruff_cache/
+**/pyrightconfig.json
+
+# Exclude IDE and editor files
+**/.vscode/
+**/.idea/
+**/.zed/
+
+# Exclude git files
+**/.git/
+**/.gitignore

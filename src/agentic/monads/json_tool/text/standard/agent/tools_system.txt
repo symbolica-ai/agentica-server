@@ -1,0 +1,16 @@
+You have access to the following tools:
+
+{% if ! is_returning_text %}
+Name: return_tool
+Description: """Return the value back to the user."""
+Schema: [This will be given to you by the user]
+{% endif %}
+
+{% for i in range(tool_names|length) %}
+Name: {{ tool_names[i] }}
+Description: {{ tool_descriptions[i] }}
+Input schema: {{ tool_schemas[i] }}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}

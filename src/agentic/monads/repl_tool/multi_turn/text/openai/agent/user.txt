@@ -1,0 +1,12 @@
+{% if task %}
+{{ include('/tags/task.txt') }}:
+{{task}}
+{% endif %}
+{{ include('/tags/expected_return_type.txt') }}:
+{{return_type}}
+{{ include('/tags/additional_python_resources.txt') }}:
+{% if has_local_resources or local_resources_stub %}
+{{local_resources_stub | trim}}
+{% else %}
+There are no additional tools or resources.
+{% endif %}

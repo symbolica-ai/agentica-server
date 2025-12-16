@@ -16,7 +16,7 @@ dependencies = [
 
 # we cannot depend on guest directly, because editable must be set to false in "guest"
 [tool.uv.sources]
-agentica-internal = {path = "../../../../common/", editable = true}
+# agentica-internal comes from PyPI, if you want to build it locally, specify the path here
 
 [tool.uv]
 link-mode = "copy"

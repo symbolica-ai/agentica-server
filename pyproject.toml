@@ -46,7 +46,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.uv.sources]
 host = { path = "src/sandbox/host", editable = true }
-# agentica-internal comes from PyPI, if you want to build it locally, specify the path here
+agentica-internal = { path = "../common", editable = true }
 
 [tool.setuptools]
 package-dir = { "" = "src" }

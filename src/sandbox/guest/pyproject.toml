@@ -13,7 +13,7 @@ dependencies = [
 where = ["."]
 
 [tool.uv.sources]
-agentica-internal = {path = "../../../../common/"}
+# agentica-internal comes from PyPI, if you want to build it locally, specify the path here
 
 [tool.uv]
 link-mode = "copy"

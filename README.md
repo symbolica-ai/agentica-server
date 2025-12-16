@@ -38,8 +38,7 @@ uv run agentica-server
 While for development of the server itself we suggest
 ```bash
 export OPENROUTER_API_KEY="your-api-key"
-export AGENTICA_NO_SANDBOX=1
-export FORCE_ENABLE_LOGGING=CORE
+export AGENTICA_LOG_TAGS=CORE
 uv run agentica-server --log-level=INFO
 ```
 

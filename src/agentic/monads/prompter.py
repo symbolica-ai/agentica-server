@@ -169,7 +169,7 @@ def _user_prompt(
 ):
     session: ReplSessionInfo = yield repl_session_info()
 
-    if task_template := should_template(task):
+    if isinstance(task, PromptTemplate):
         # Custom user prompt:
         # - RETURN_TYPE: the return type of the function
         # - STUBS: formatted python stubs
@@ -186,7 +186,7 @@ def _user_prompt(
         )
         prompt = dedent(prompt).strip()
         formatted = yield _formatter(
-            task_template,
+            task.template,
             {
                 'RETURN_TYPE': return_type,
                 'STUBS': stubs,
@@ -194,6 +194,9 @@ def _user_prompt(
             },
         )
         formatted = dedent(formatted).strip()
+        yield pure(formatted)
+    elif system and isinstance(system, str) and task:
+        formatted = dedent(task).strip()
         yield pure(formatted)
     else:
         if premise is None:

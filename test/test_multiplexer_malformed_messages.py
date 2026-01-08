@@ -375,14 +375,19 @@ async def test_interleaved_valid_and_invalid_invokes(
     )
     await mux.run()
 
-    # Filter to just NewIIDResponse and ErrorMessage (ignore invocation events)
+    # Filter to just NewIIDResponse and MalformedInvokeMessageError
+    # (ignore InternalServerError from notifier.on_exception - those are tested elsewhere)
     responses = [
         m
         for m in captured_messages
-        if isinstance(m, (MultiplexNewIIDResponse, MultiplexErrorMessage))
+        if isinstance(m, MultiplexNewIIDResponse)
+        or (
+            isinstance(m, MultiplexErrorMessage)
+            and "malformedinvokemessageerror" in str(m.error_name).lower()
+        )
     ]
 
-    # Should have 5 responses: 3 valid (NewIIDResponse) + 2 invalid (ErrorMessage)
+    # Should have 5 responses: 3 valid (NewIIDResponse) + 2 invalid (MalformedInvokeMessageError)
     assert len(responses) == 5
 
     # valid-1: should get MultiplexNewIIDResponse

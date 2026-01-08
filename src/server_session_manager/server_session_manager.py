@@ -178,6 +178,7 @@ class ServerSessionManager:
         max_tokens_per_invocation = body.max_tokens_per_invocation
         max_tokens_per_round = body.max_tokens_per_round
         max_rounds = body.max_rounds
+        reasoning_effort = body.reasoning_effort
         protocol = body.protocol
 
         inferencer = InferenceEndpoint(
@@ -240,6 +241,7 @@ class ServerSessionManager:
             max_tokens_per_round=max_tokens_per_round,
             max_rounds=max_rounds,
             warp_globals_payload=warp_globals_payload,
+            reasoning_effort=reasoning_effort,
             protocol=protocol,
             sandbox_mode=self.sandbox_mode,
             session_id=cid,

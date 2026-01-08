@@ -15,6 +15,18 @@ if TYPE_CHECKING:
     from ..apis.openai_chat_completions import OpenAIChatCompletionInput
 
 
+def is_empty_content(content: Any) -> bool:
+    if isinstance(content, str):
+        return content is None or content == ''
+    elif isinstance(content, dict):
+        return content.get('type') == 'text' and (
+            content.get('text') is None or content.get('text') == ''
+        )
+    elif isinstance(content, list):
+        return all(is_empty_content(item) for item in content)
+    return False
+
+
 # === Converter ===
 
 
@@ -39,7 +51,7 @@ class OpenAIChatCompletionConverter(Converter['OpenAIChatCompletionInput']):
         # See https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#best-practices-for-effective-caching  for more details.
 
         # Adding static content at the beginning for Anthropic caching
-        kwargs = {
+        kwargs: dict[str, Any] = {
             'model': context.gen.model,
         }
         if context.gen.streaming:
@@ -49,6 +61,10 @@ class OpenAIChatCompletionConverter(Converter['OpenAIChatCompletionInput']):
         if context.gen.endpoint.user_id is not None:
             kwargs['user'] = context.gen.endpoint.user_id
 
+        if context.gen.reasoning_effort is not None:
+            # as per https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+            kwargs['reasoning'] = {'effort': context.gen.reasoning_effort}
+
         constraint_kwargs = dict()
         constraint_kwargs = await convert_from_constraints(
             context,
@@ -57,7 +73,7 @@ class OpenAIChatCompletionConverter(Converter['OpenAIChatCompletionInput']):
         )
         model_provider = "anthropic" if context.gen.model.startswith('anthropic') else "openai"
         messages = convert_from_deltas(context.gen.deltas, model_provider)
-        kwargs['messages'] = messages
+        kwargs['messages'] = [m for m in messages if not is_empty_content(m.get('content'))]
 
         # Adding caching for OpenAI models
         if model_provider == "openai":

@@ -594,6 +594,20 @@ class TestMakeEnd:
         assert isinstance(result, EndGenMaxTokens)
         assert result.constraint == mock_constraint
 
+    def test_make_end_finish_reason_length_no_constraint(self):
+        """Test that finish_reason='length' works even without MaxTokensConstraint.
+
+        This can happen when the model hits its provider-side token limit
+        but the caller didn't explicitly set max_tokens.
+        """
+        choice = {'message': {}, 'finish_reason': 'length'}
+        constraints: list = []  # No MaxTokensConstraint
+
+        result = make_end(choice, constraints)
+
+        assert isinstance(result, EndGenMaxTokens)
+        assert result.constraint is None
+
     def test_make_end_finish_reason_stop(self):
         choice = {'message': {}, 'finish_reason': 'stop', 'stop_text': 'END'}
 

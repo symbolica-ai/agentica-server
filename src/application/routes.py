@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
+import msgspec.json
 from agentica_internal.multiplex_protocol.multiplex_protocol import (
     MultiplexClientInstanceMessage,
     MultiplexClientMessage,
@@ -33,6 +34,7 @@ from agentic.version_policy import (
     format_unsupported_message,
     format_upgrade_message,
 )
+from application.http_client import get_client
 from application.metrics import (
     active_agents,
     agent_creation_duration_seconds,
@@ -46,6 +48,9 @@ from application.responses import AnsiHTMLResponse, LogFileResponse, ZipResponse
 from server_session_manager import ServerSessionManager
 
 logger = logging.getLogger(__name__)
+
+
+_json_encoder = msgspec.json.Encoder()
 
 
 # Real-time trace streaming infrastructure
@@ -278,7 +283,7 @@ async def echo(request: Request, uid: str, iid: str) -> Stream:
 
     async def ndjson() -> AsyncGenerator[bytes, None]:
         async for log in stream:
-            yield (json.dumps(log, indent=None) + '\n').encode('utf-8')
+            yield _json_encoder.encode(log) + b'\n'
 
     return Stream(
         content=ndjson(),
@@ -297,7 +302,7 @@ async def echo_all(request: Request, uid: str) -> Stream:
 
     async def ndjson() -> AsyncGenerator[bytes, None]:
         async for log in stream:
-            yield (json.dumps(log, indent=None) + '\n').encode('utf-8')
+            yield _json_encoder.encode(log) + b'\n'
 
     return Stream(
         content=ndjson(),
@@ -316,7 +321,7 @@ async def echo_global(request: Request, uid: str) -> Stream:
 
     async def ndjson() -> AsyncGenerator[bytes, None]:
         async for log in stream:
-            yield (json.dumps(log, indent=None) + '\n').encode('utf-8')
+            yield _json_encoder.encode(log) + b'\n'
 
     return Stream(
         content=ndjson(),
@@ -534,13 +539,14 @@ async def search_traces(
     if service:
         params["tags"] = f'service.name="{service}"'
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{TEMPO_URL}/api/search",
-            params=params,
-        )
-        response.raise_for_status()
-        return response.json()
+    client = get_client()
+    response = await client.get(
+        f"{TEMPO_URL}/api/search",
+        params=params,
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 @get("/traces")
@@ -582,10 +588,10 @@ async def get_trace(trace_id: str) -> dict[str, Any]:
         GET /traces/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{TEMPO_URL}/api/traces/{trace_id}")
-            response.raise_for_status()
-            return response.json()
+        client = get_client()
+        response = await client.get(f"{TEMPO_URL}/api/traces/{trace_id}", timeout=30.0)
+        response.raise_for_status()
+        return response.json()
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -633,29 +639,29 @@ async def get_detailed_traces(
             return {"traces": [], "count": 0}
 
         # Fetch full details for each trace
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            detailed_traces = []
-            for trace_summary in search_result["traces"]:
-                trace_id = trace_summary.get("traceID")
-                if not trace_id:
-                    continue
+        client = get_client()
+        detailed_traces = []
+        for trace_summary in search_result["traces"]:
+            trace_id = trace_summary.get("traceID")
+            if not trace_id:
+                continue
 
-                try:
-                    response = await client.get(f"{TEMPO_URL}/api/traces/{trace_id}")
-                    response.raise_for_status()
-                    trace_data = response.json()
+            try:
+                response = await client.get(f"{TEMPO_URL}/api/traces/{trace_id}", timeout=60.0)
+                response.raise_for_status()
+                trace_data = response.json()
 
-                    # Add search metadata to the full trace
-                    trace_data["metadata"] = trace_summary
-                    detailed_traces.append(trace_data)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch trace {trace_id}: {e}")
-                    continue
+                # Add search metadata to the full trace
+                trace_data["metadata"] = trace_summary
+                detailed_traces.append(trace_data)
+            except Exception as e:
+                logger.warning(f"Failed to fetch trace {trace_id}: {e}")
+                continue
 
-            return {
-                "traces": detailed_traces,
-                "count": len(detailed_traces),
-            }
+        return {
+            "traces": detailed_traces,
+            "count": len(detailed_traces),
+        }
 
     except HTTPException:
         raise

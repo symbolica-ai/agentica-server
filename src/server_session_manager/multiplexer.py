@@ -248,7 +248,7 @@ class Multiplexer:
         """
         Handle a single client message.
         """
-        logger.info(f"Received {multiplex_message}")
+        logger.debug("Received: %s", multiplex_message)
 
         match multiplex_message:
             case MultiplexInvokeMessage(

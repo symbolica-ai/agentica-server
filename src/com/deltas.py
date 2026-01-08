@@ -65,7 +65,7 @@ class EndGenEOS(EndGen):
 class EndGenMaxTokens(EndGen):
     """End of generation because maximum number of tokens reached."""
 
-    constraint: 'MaxTokensConstraint'
+    constraint: 'MaxTokensConstraint | None'
 
 
 @dataclass

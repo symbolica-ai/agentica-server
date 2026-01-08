@@ -14,7 +14,7 @@ from agentica_internal.multiplex_protocol.multiplex_protocol import (
     MultiplexErrorMessage,
     MultiplexServerInstanceMessage,
 )
-from agentica_internal.session_manager_messages import PromptTemplate
+from agentica_internal.session_manager_messages import PromptTemplate, ReasoningEffort
 
 from com.apis import API
 from com.context import Context, GenModel
@@ -94,6 +94,7 @@ class Agent:
         max_tokens_per_round: int | None,
         max_rounds: int | None,
         warp_globals_payload: bytes,
+        reasoning_effort: ReasoningEffort | None = None,
         sandbox_mode: SandboxMode = 'from_env',
         session_id: str | None = None,
         session_manager_id: str | None = None,
@@ -152,6 +153,7 @@ class Agent:
             max_completion_tokens=max_tokens,
             guided=json,  # TODO: currently this is tied to json mode.
             streaming=always_streaming,
+            reasoning_effort=reasoning_effort,
             endpoint=inference_endpoint,
             send_gen_err=self.send_gen_error,
         )

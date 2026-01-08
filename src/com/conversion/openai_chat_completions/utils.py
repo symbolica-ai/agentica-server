@@ -84,7 +84,9 @@ def make_end(
             # return make_callable_end(choice['message']['tool_calls'], callable_constraints)
         case 'length':
             return EndGenMaxTokens(
-                constraint=next(c for c in constraints if isinstance(c, MaxTokensConstraint)),
+                constraint=next(
+                    (c for c in constraints if isinstance(c, MaxTokensConstraint)), None
+                ),
             )
         case 'stop':
             return EndGenStopToken(

@@ -291,6 +291,10 @@ class PyWasmRunner(LogBase, AbstractEventLoopPolicy):
 EXECENV_DIR = Path(__file__).parent.parent / "guest"
 EXECENV_FILE = EXECENV_DIR / "execenv.py"
 
+# Lock to prevent race conditions when multiple sandboxes load execenv concurrently.
+# Without this, concurrent sandboxes could overwrite each other's wit_world in sys.modules.
+_MODULE_LOCK = threading.Lock()
+
 
 class ExecEnvHostModule(types.ModuleType):
     def __init__(
@@ -316,25 +320,26 @@ class ExecEnvGuestModule(types.ModuleType):
 
     def __new__(cls, host_module: ExecEnvHostModule):
         modules = sys.modules
-        # modules.pop('sandbox.guest.poll_loop', None)
-        try:
-            module_spec = importlib.util.spec_from_file_location(
-                'sandbox.guest',
-                EXECENV_FILE,
-                submodule_search_locations=[EXECENV_DIR.as_posix()],
-            )
-            guest_module = importlib.util.module_from_spec(module_spec)
-            guest_module.__package__ = 'sandbox.guest'
-            # guest_module.__spec__ = module_spec
-            modules['wit_world'] = host_module
-            module_spec.loader.exec_module(guest_module)
-            assert hasattr(guest_module, 'WitWorld')
-            return guest_module
-        except Exception as ex:
-            P.tprint('\n'.join(sys.modules))
-            P.tprint('exception during loading of execenv')
-            P.print_exception(ex)
-            raise
+        # Serialize module loading to prevent race conditions where concurrent
+        # sandboxes overwrite each other's wit_world in sys.modules.
+        with _MODULE_LOCK:
+            try:
+                module_spec = importlib.util.spec_from_file_location(
+                    'sandbox.guest',
+                    EXECENV_FILE,
+                    submodule_search_locations=[EXECENV_DIR.as_posix()],
+                )
+                guest_module = importlib.util.module_from_spec(module_spec)
+                guest_module.__package__ = 'sandbox.guest'
+                modules['wit_world'] = host_module
+                module_spec.loader.exec_module(guest_module)
+                assert hasattr(guest_module, 'WitWorld')
+                return guest_module
+            except Exception as ex:
+                P.tprint('\n'.join(sys.modules))
+                P.tprint('exception during loading of execenv')
+                P.print_exception(ex)
+                raise
 
 
 def new_exec_env(

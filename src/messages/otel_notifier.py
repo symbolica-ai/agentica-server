@@ -231,7 +231,7 @@ class OTelNotifier:
         iid: str,
         event: InteractionEvent,
     ) -> None:
-        logger.debug(f"OTel: on_interaction_event called - iid={iid}, event={event}")
+        logger.debug("OTel: on_interaction_event called - iid=%s, event=%s", iid, event)
         parent_span = self._invocation_spans.get(iid)
         if parent_span is None:
             logger.warning(

@@ -5,6 +5,8 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+from agentica_internal.session_manager_messages import ReasoningEffort
+
 from com.deltas import *
 from com.roles import *
 
@@ -50,6 +52,7 @@ class GenModel:
     send_gen_err: SendGenErrFn
     guided: bool = False
     streaming: bool = False
+    reasoning_effort: ReasoningEffort | None = None
     cache_key: 'GenCacheKey' = field(default_factory=_default_cache_key)
     error_handling: 'GenModelErrorHandling' = field(default_factory=_default_error_handling)
 

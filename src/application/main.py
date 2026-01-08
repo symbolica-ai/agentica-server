@@ -33,6 +33,7 @@ from application.defaults import (
     DEFAULT_SANDBOX_LOG_TAGS,
     ORGANIZATION_ID,
 )
+from application.http_client import close_client, init_client
 from application.routes import get_routes
 from auth import RequestLoggingMiddleware
 from messages import Poster
@@ -299,7 +300,12 @@ class SessionManager:
             middleware=middleware,
             cors_config=cors_config,
             debug=True,  # TODO: should this be True in production?
-            on_startup=[self._setup_otel_logging, self._log_startup_message],
+            on_startup=[
+                self._init_http_client,
+                self._setup_otel_logging,
+                self._log_startup_message,
+            ],
+            on_shutdown=[self._shutdown_http_client],
         )
 
         # Get tracer for session manager
@@ -394,6 +400,14 @@ class SessionManager:
             self._config.host,
             self._config.port,
         )
+
+    async def _init_http_client(self, app: Litestar) -> None:
+        """Initialize the shared HTTP client on startup."""
+        init_client()
+
+    async def _shutdown_http_client(self, app: Litestar) -> None:
+        """Close the shared HTTP client on shutdown."""
+        await close_client()
 
     def inference_endpoint_client(
         self,

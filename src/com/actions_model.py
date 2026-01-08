@@ -188,11 +188,17 @@ class ModelInference(Action[GeneratedDelta]):
                 await ctx.invocation.log_genai_chat(event)
 
             if isinstance(response.end, EndGenMaxTokens):
-                raise MaxTokensError(response.end.constraint.max_tokens)
+                if response.end.constraint is not None:
+                    raise MaxTokensError(response.end.constraint.max_tokens)
+                else:
+                    raise MaxTokensError(
+                        "The provider's default limit for number of tokens was reached."
+                    )
             if isinstance(response.end, EndGenStopToken) and response.end.filtered:
                 raise ContentFilteringError()
             return response
-        except RateLimitError as e:
+        except (RateLimitError, APIConnectionError):
+            # Transient errors - retry with exponential backoff
             delay *= exponential_base * (1 + jitter * random.random())
             await asyncio.sleep(delay)
             return None

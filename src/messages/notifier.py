@@ -4,6 +4,7 @@ from logging import getLogger
 from typing import Callable
 
 from agentica_internal.multiplex_protocol import (
+    MultiplexErrorMessage,
     MultiplexInvocationEventMessage,
     MultiplexServerMessage,
 )
@@ -56,7 +57,7 @@ class Notifier:
         self.send_mx_message = send_mx_message
 
     async def append_to_log(self, msg: AllServerMessage) -> None:
-        logger.info(str(msg))
+        logger.debug("Log: %s", msg)
         if BROADCAST_LOGS:
             await self.log_poster.post(msg)
         self.logs.add(self.uid, msg)
@@ -134,6 +135,16 @@ class Notifier:
                 error_message=str(err),
             )
         )
+        # Send error message so SDK receives details instead of generic "unexpected state" error
+        await self.send_mx_message(
+            MultiplexErrorMessage(
+                iid=iid,
+                uid=self.uid,
+                error_name="InternalServerError",
+                error_message=err,
+            )
+        )
+        # Keep event message for backward compatibility
         await self.send_mx_message(
             MultiplexInvocationEventMessage(
                 uid=self.uid,

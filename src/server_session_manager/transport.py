@@ -17,7 +17,7 @@ class WebSocketSender:
         while True:
             try:
                 msg = await self._queue.get()
-                logger.info(f"Sending {msg}")
+                logger.debug("Sending: %s", msg)
                 await self._send_bytes(multiplex_to_json(msg))
             except CancelledError:
                 break

@@ -1,5 +1,11 @@
 # Agentica Server
 
+[![CI](https://github.com/symbolica-ai/arcgentica/actions/workflows/ci.yml/badge.svg)](https://github.com/symbolica-ai/arcgentica/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/discord/1470799122717085941?logo=discord&label=Discord)](https://discord.gg/bddGs8bb)
+[![Twitter](https://img.shields.io/twitter/follow/symbolica?style=flat&logo=x&label=Follow)](https://x.com/symbolica)
+
 [Agentica](https://agentica.symbolica.ai) is a type-safe AI framework that lets LLM agents integrate with your code—functions, classes, live objects, even entire SDKs. Instead of building MCP wrappers or brittle schemas, you pass references directly; the framework enforces your types at runtime, constrains return types, and manages agent lifecycle.
 
 This repository contains the session management backend (the "server"). It handles session orchestration, state persistence, sandboxed code execution, and coordination between clients and the Agentica runtime.
@@ -64,4 +70,4 @@ This project adheres to a [Code of Conduct](./CODE_OF_CONDUCT.md). By participat
 
 ## License
 
-See [LICENSE](./LICENSE).
+This project is licensed under the [MIT License](LICENSE).

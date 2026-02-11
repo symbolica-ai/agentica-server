@@ -7,9 +7,10 @@ import weakref
 from asyncio import Lock
 from collections.abc import AsyncGenerator, Generator, Iterator
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from threading import current_thread
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from agentica_internal.core.gc import inspect_referrers, log_refcount
 from agentica_internal.core.strs import timestamp_str
@@ -22,7 +23,6 @@ from litestar.status_codes import WS_1011_INTERNAL_ERROR
 
 from agentic import Agent
 from agentic.models import ProviderModel
-from inference import InferenceEndpoint
 from messages import (
     FilterFn,
     Holder,
@@ -37,6 +37,9 @@ from .multiplexer import (
 )
 from .transport import WebSocketSender
 
+if TYPE_CHECKING:
+    from .provider import InferenceProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,12 +50,51 @@ type CID = str  # Client Session ID
 type SandboxMode = Literal['no_sandbox', 'wasm', 'from_env']
 
 
+class API(Enum):
+    CHAT_COMPLETIONS = "chat/completions"
+    RESPONSES = "responses"
+    MESSAGES = "messages"
+
+
+def infer_api_from_endpoint(url: str) -> tuple[str, API]:
+    """Infer the API type from the inference endpoint URL.
+
+    Args:
+        url: The inference endpoint URL (e.g., "https://api.openai.com/v1/responses")
+
+    Returns:
+        API.OPENAI_RESPONSES if URL ends with '/responses'
+        API.OPENAI_CHAT_COMPLETIONS if URL ends with '/chat/completions'
+        API.MESSAGES if URL ends with '/messages'
+
+    Raises:
+        ValueError: If the URL doesn't end with a recognized API path
+
+    Notes:
+        For Messages API (Anthropic), the base_url is stripped down to exclude /v1/
+        since the Anthropic SDK adds the full path /v1/messages itself.
+        For OpenAI APIs, the base_url includes /v1/ as expected.
+    """
+    normalized = url.rstrip('/')
+    for path in API:
+        if normalized.endswith(path.value):
+            base_url = normalized[: -len(path.value)]
+            # Anthropic SDK expects base_url without /v1/ - it adds /v1/messages itself
+            if path == API.MESSAGES:
+                base_url_stripped = base_url.rstrip('/')
+                if base_url_stripped.endswith('/v1'):
+                    base_url = base_url_stripped[:-3]
+            return (base_url, path)
+    raise ValueError(f"Unknown API type: {url}")
+
+
 @dataclass
 class Session:
     """tracks client session against its associated agents."""
 
     cid: CID
     uids: set[UID] = field(default_factory=set)
+    start_timestamp: str = field(default_factory=timestamp_str)
 
     def add_agent(self, uid: UID) -> None:
         self.uids.add(uid)
@@ -71,11 +113,10 @@ class Session:
 class ServerSessionManager:
     log_poster: Poster
     id_issuer: Callable[[], str]
-    inference_token: str
-    inference_endpoint: str
+    providers: list["InferenceProvider"]
     tracer: OTracer
     user_id: str | None  # inference user-id
-    max_concurrent_invocations: int
+    max_concurrent_invocations: int | None
     sandbox_mode: SandboxMode
     sandbox_log_path: str | None
     sandbox_log_tags: str | None
@@ -98,12 +139,11 @@ class ServerSessionManager:
     def __init__(
         self,
         log_poster: Poster,
-        inference_token: str,
-        inference_endpoint: str,
-        user_id: str | None,
+        providers: list["InferenceProvider"],
+        user_id: str | None = None,
         tracer: OTracer = None,
         id_issuer: Callable[[], str] = lambda: str(uuid.uuid4()),
-        max_concurrent_invocations: int = 64,
+        max_concurrent_invocations: int | None = None,
         sandbox_mode: SandboxMode = 'from_env',
         sandbox_log_path: str | None = None,
         sandbox_log_tags: str | None = None,
@@ -113,8 +153,7 @@ class ServerSessionManager:
 
         self.id_issuer = id_issuer
         self.log_poster = log_poster
-        self.inference_token = inference_token
-        self.inference_endpoint = inference_endpoint
+        self.providers = providers
         self.user_id = user_id or 'sm-' + uuid.uuid4().hex
         self.max_concurrent_invocations = max_concurrent_invocations
         self.sandbox_mode = sandbox_mode
@@ -144,7 +183,10 @@ class ServerSessionManager:
             logger.debug(
                 f"Invocation check: {self._concurrent_invocations}/{self.max_concurrent_invocations}"
             )
-            if self._concurrent_invocations >= self.max_concurrent_invocations:
+            if (
+                self.max_concurrent_invocations is not None
+                and self._concurrent_invocations >= self.max_concurrent_invocations
+            ):
                 logger.debug(f"LIMIT REACHED: cannot create invocation")
                 return False
             self._concurrent_invocations += 1
@@ -170,7 +212,6 @@ class ServerSessionManager:
         uid = self.id_issuer()
 
         model = ProviderModel.parse(body.model)
-        json = body.json
         streaming = body.streaming
         warp_globals_payload = body.warp_globals_payload
         premise = body.doc
@@ -179,18 +220,27 @@ class ServerSessionManager:
         max_tokens_per_round = body.max_tokens_per_round
         max_rounds = body.max_rounds
         reasoning_effort = body.reasoning_effort
+        cache_ttl = body.cache_ttl
         protocol = body.protocol
 
-        inferencer = InferenceEndpoint(
-            inference_token=self.inference_token,
-            inference_endpoint=self.inference_endpoint,
-            notifier=self._notifier,
-            fresh_id=self.id_issuer,
-            user_id=self.user_id,
-        )
-        # Check we are authenticated with the inference endpoint
-        await inferencer.authenticate()
-        # Also, let's just validate the model against the inference endpoint
+        # Create the appropriate InferenceSystem based on matching provider
+        from .provider import NoMatchingProviderError
+
+        inferencer = None
+        for provider in self.providers:
+            inferencer = provider.create_inference_system(
+                model_id=body.model,
+                fresh_id=self.id_issuer,
+                notifier=self._notifier,
+            )
+            if inferencer is not None:
+                break
+
+        if inferencer is None:
+            raise NoMatchingProviderError(body.model)
+
+        # TODO: re-implement authentication check
+        # TODO: re-implement OpenRouter model validation
         await model.validate_openrouter_model(inferencer)
 
         # Associate agent with client session
@@ -231,9 +281,8 @@ class ServerSessionManager:
         ma = Agent(
             uid=uid,
             fresh_id=self.id_issuer,
-            inference_endpoint=inferencer,
+            inference_system=inferencer,
             model=model,
-            json=json,
             always_streaming=streaming,
             premise=premise,
             system=system,
@@ -242,6 +291,7 @@ class ServerSessionManager:
             max_rounds=max_rounds,
             warp_globals_payload=warp_globals_payload,
             reasoning_effort=reasoning_effort,
+            cache_ttl=cache_ttl,
             protocol=protocol,
             sandbox_mode=self.sandbox_mode,
             session_id=cid,
@@ -260,7 +310,6 @@ class ServerSessionManager:
             extra={
                 "agent_uid": uid,
                 "agent_model": body.model,
-                "agent_json": json,
                 "agent_streaming": streaming,
                 "has_premise": bool(premise),
                 "has_system": bool(system),
@@ -307,7 +356,10 @@ class ServerSessionManager:
         import re
 
         chunks_by_key = {}
-        _, files = self.sandbox_log_paths(max_files=max_files, find=find, uid=uid)
+        result = self.sandbox_log_paths(max_files=max_files, find=find, uid=uid)
+        if result is None:
+            return ''
+        _, files = result
         find_re = re.compile(find) if find else None
         for file in files:
             text = file.read_text()
@@ -461,7 +513,7 @@ class ServerSessionManager:
                 # cancel any running invocations before closing
                 if hasattr(agent, 'iid') and agent.iid:
                     agent.cancel(agent.iid)
-                agent.close()
+                await agent.aclose()
                 del agent
 
             await asyncio.sleep(0)

@@ -87,7 +87,6 @@ class OTelNotifier:
             body: Agent creation request details
         """
         # Store config for later use when session span is created
-        self._model_info["agent.config.json"] = str(body.json)
         self._model_info["agent.config.streaming"] = str(body.streaming)
         if body.doc:
             self._model_info["agent.config.doc_length"] = str(len(body.doc))

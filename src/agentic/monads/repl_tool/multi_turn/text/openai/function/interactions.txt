@@ -1,3 +1,4 @@
+{%- if not uses_tool_calls %}
 Interactions:
 
 - Only two types exist:
@@ -7,3 +8,4 @@ Interactions:
     - From {{ include('/tags/function_inputs.txt') }}: an empty message (since {{function_name}} has no inputs) signifying that you must output the result of {{function_name}}.
 {% endif %}
     - {{ include('/execution-role.txt') }}
+{%- endif -%}

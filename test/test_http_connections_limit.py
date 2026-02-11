@@ -7,10 +7,12 @@ Tests the http_client module under various concurrent load scenarios to verify:
 """
 
 import asyncio
+import logging
 import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from os import getenv
 
 import httpx
 import pytest
@@ -20,8 +22,17 @@ from litestar import Litestar, route
 
 from application import http_client
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # Shared state for the test server (reset per server instance)
 _server_state: dict = {}
+
+# printing is disabled locally so running all tests doesn't produce
+# a bunch of hard-to-read noise
+if getenv("LOCAL_TESTING"):
+
+    def print(*args, **kwargs):
+        pass
 
 
 def create_test_app(response_delay: float = 0.0) -> Litestar:
@@ -108,6 +119,7 @@ async def reset_http_client():
 
 
 @pytest.mark.asyncio
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 async def test_basic_connection_pooling(reset_http_client):
     """Test that basic connection pooling works with default settings."""
     with mock_http_server(port=9871) as base_url:
@@ -324,7 +336,11 @@ async def test_client_close_and_reinit(reset_http_client):
 @pytest.mark.asyncio
 async def test_unlimited_connections(reset_http_client):
     """Test behavior with no connection limit (max_connections=None)."""
-    num_requests = 504  # Higher number hit fd limit
+
+    if not getenv("LOCAL_TESTING"):
+        num_requests = 504  # higher number hit fd limit
+    else:
+        num_requests = 100  # for local dev the limit is lower
 
     with mock_http_server(port=9878, response_delay=0.02) as base_url:
         http_client.init_client(

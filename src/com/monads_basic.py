@@ -3,7 +3,9 @@ from typing import TYPE_CHECKING, Any
 
 from com.abstract import Do, HistoryMonad, Pure
 from com.actions_basic import *
+from com.actions_model import ModelInference
 from com.roles import *
+from inference.endpoint import Generation, Role
 
 __all__ = [
     "pure",
@@ -23,6 +25,9 @@ __all__ = [
     "send_log",
     "log_code_block",
     "log_execute_result",
+    "insert_execution_result",
+    "insert_function_call",
+    "model_inference",
 ]
 
 
@@ -88,9 +93,8 @@ def lift[A, B](f: Callable[[A], B]) -> Callable[[A], HistoryMonad[B]]:
 # Insertion monad
 
 
-def insert_string(content: str, name: RoleType) -> HistoryMonad[None]:
-    """Verbatim insert some text into the prompt history, optionally specifying the role (default `'user'`)."""
-    role = GenRole.from_name(name)
+def insert_string(content: str, role: 'Role') -> HistoryMonad[None]:
+    """Verbatim insert some text into the prompt history."""
     return Do(Insert(content, role), Pure)
 
 
@@ -167,3 +171,38 @@ def log_code_block(code: str) -> HistoryMonad[UUID]:
 def log_execute_result(result: str, exec_id: UUID) -> HistoryMonad[None]:
     """Log a code block being executed and its result."""
     return Do(LogExecuteResult(result, exec_id), Pure)
+
+
+def insert_execution_result(output: str) -> HistoryMonad[None]:
+    """Insert code execution result into the conversation.
+
+    The InferenceSystem handles the appropriate format:
+    - ResponsesSystem: tries tool result first, falls back to user message
+    - ChatCompletionsSystem: always inserts as user message
+    """
+    return Do(InsertExecutionResult(output), Pure)
+
+
+def insert_function_call(name: str, code: str, text: str = "") -> HistoryMonad[None]:
+    """Insert a synthetic function call into the conversation for few-shot examples.
+
+    This is used when uses_tool_calls=True to format few-shot examples as tool calls
+    rather than markdown code blocks.
+
+    Args:
+        name: Tool name (e.g., "python")
+        code: The code to execute
+        text: Optional reasoning/explanation text to include in the assistant message
+    """
+    return Do(InsertFunctionCall(name, code, text), Pure)
+
+
+# Generation monad
+
+
+def model_inference() -> HistoryMonad[Generation]:
+    """
+    Query the inference system w.r.t. the current inference config (on the Context)
+    to retrieve a `Generation` containing output text and optional code.
+    """
+    return Do(ModelInference(), Pure)

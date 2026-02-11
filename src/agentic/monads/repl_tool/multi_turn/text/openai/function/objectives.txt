@@ -19,7 +19,11 @@ Core Objectives and Constraints:
 - After you have used the REPL if / as necessary, execute `return VALUE` to provide the final output for the function.
 {% endif %}
 - Output the result of {{function_name}}, regardless of the {{ include('/tags/function_inputs.txt') }}.
+{%- if uses_tool_calls %}
+- Every reply to {{ include('/tags/function_inputs.txt') }} must use the `python` tool call, with a single tool call per message. Never include prose or output outside of these tool calls.
+{%- else %}
 - Every reply to {{ include('/tags/function_inputs.txt') }} must be a Python code block (using ```python ... ```), with a single code block per message. Never include prose or output outside of these code blocks.
+{%- endif %}
 - Always begin reasoning with code: use code inspection and small experiments if needed, especially for examining predefined objects, before attempting a solution.
 - Split your process into incremental steps: For each turn, respond with a single concise code blocks that inspect or progress towards the solution, integrating new stubs and any pre-defined Python objects as needed. After each, wait for the {{ include('/tags/execution.txt') }} user's reply with code output before continuing.
 - The environment is persistent{% if has_global_resources %}; pre-defined Python objects remain present throughout the session{% endif %}.

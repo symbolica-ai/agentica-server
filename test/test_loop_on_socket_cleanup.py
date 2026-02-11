@@ -9,15 +9,25 @@ from agentica_internal.session_manager_messages import CreateAgentRequest
 from litestar.exceptions import WebSocketDisconnect
 from litestar.status_codes import WS_1000_NORMAL_CLOSURE
 
-from server_session_manager import ServerSessionManager
+from server_session_manager import InferenceProvider, ServerSessionManager
 
 
 def create_session_manager():
     """Create a ServerSessionManager with minimal mock dependencies."""
+    # Create a single provider from config
+    providers = [
+        InferenceProvider.from_config(
+            {
+                'endpoint': "https://openrouter.ai/api/v1/chat/completions",
+                'token': 'test-token',
+                'model_pattern': '*',
+            }
+        )
+    ]
+
     return ServerSessionManager(
         log_poster=MagicMock(),
-        inference_token="test-token",
-        inference_endpoint="http://test",
+        providers=providers,
         user_id="test-user",
         sandbox_mode='no_sandbox',
     )
@@ -37,8 +47,18 @@ def create_mock_socket():
     return socket
 
 
+@pytest.fixture
+def suppress_ssm_logs():
+    import logging
+
+    logger = logging.getLogger('server_session_manager')
+    logger.setLevel(logging.CRITICAL)
+    yield
+    logger.setLevel(logging.ERROR)
+
+
 @pytest.mark.asyncio
-async def test_loop_on_socket_deregisters_session_and_cleans_up_agent():
+async def test_loop_on_socket_deregisters_session_and_cleans_up_agent(suppress_ssm_logs):
     """
     When loop_on_socket exits, the session should be deregistered
     and all agents in that session should be cleaned up.
@@ -58,13 +78,9 @@ async def test_loop_on_socket_deregisters_session_and_cleans_up_agent():
 
     mock_agent = MagicMock()
     mock_agent.iid = None
-    mock_agent.close = MagicMock()
+    mock_agent.aclose = MagicMock()
 
     with (
-        patch(
-            'server_session_manager.server_session_manager.InferenceEndpoint',
-            return_value=mock_inferencer,
-        ),
         patch(
             'server_session_manager.server_session_manager.ProviderModel.parse',
             return_value=mock_model,
@@ -76,7 +92,6 @@ async def test_loop_on_socket_deregisters_session_and_cleans_up_agent():
             model="openai/gpt-4",
             doc=None,
             system=None,
-            json=False,
             streaming=False,
             warp_globals_payload=b"",
         )
@@ -93,4 +108,4 @@ async def test_loop_on_socket_deregisters_session_and_cleans_up_agent():
         # Verify session was deregistered and agent was cleaned up
         assert not sm.has_agent(uid)
         assert not sm.has_session(cid)
-        mock_agent.close.assert_called_once()
+        mock_agent.aclose.assert_called_once()

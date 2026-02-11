@@ -88,6 +88,12 @@ class AgentRepl(BaseRepl):
             elif global_vars and name in global_vars:
                 setter(self, global_vars[name])
 
+        # find modules
+        if global_vars:
+            if modules := tuple(v for v in global_vars.values() if issubclass(type(v), ModuleType)):
+                self.log("exposing global modules", modules)
+                self.add_modules(*modules)
+
         self.update_resources_info(local_vars, Scope.LOCALS)
         self.update_resources_info(global_vars, Scope.GLOBALS)
         self.update_system_info()
@@ -263,7 +269,7 @@ class AgentRepl(BaseRepl):
     ############################################################################
 
     def get_loaded_modules(self) -> tuple[str, ...]:
-        return tuple(k for k, v in self.vars.globals.items() if type(v) is ModuleType)
+        return tuple(k for k, v in self.vars.globals.items() if isinstance(v, ModuleType))
 
     ############################################################################
 

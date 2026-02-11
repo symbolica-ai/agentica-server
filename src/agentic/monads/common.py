@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
-__all__ = ['text_between', 'text_not_between', 'JINJA_ENV_CACHE']
+__all__ = ['JINJA_ENV_CACHE']
 
 
 # === Utilities ===

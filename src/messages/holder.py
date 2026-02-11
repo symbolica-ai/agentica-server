@@ -1,38 +1,8 @@
 from collections import defaultdict, deque
 from collections.abc import Iterable, Iterator
-from typing import Any, Callable, override
+from typing import Any, Callable
 
 type FilterFn[M] = Callable[[M], bool] | None
-
-MAX_KEYS = 256
-MAX_MESSAGES = 1024
-MAX_LISTENERS = 128
-
-
-class maxdefaultdict[K, V](defaultdict[K, V]):
-    maxlen: int
-
-    def __init__(self, default_factory: Callable[[], V], maxlen: int, *args, **kwargs):
-        super().__init__(default_factory, *args, **kwargs)
-        self.maxlen = maxlen
-
-    def _trim(self) -> None:
-        # keep only the last `maxlen` keys
-        if len(self) < self.maxlen:
-            return
-        prune_keys = list(self.keys())[: -self.maxlen]
-        for key in prune_keys:
-            del self[key]
-
-    @override
-    def update(self, *args, **kwargs) -> None:
-        super().update(*args, **kwargs)
-        self._trim()
-
-    @override
-    def __setitem__(self, key: K, value: V) -> None:
-        super().__setitem__(key, value)
-        self._trim()
 
 
 class Holder[K, M]:
@@ -43,9 +13,9 @@ class Holder[K, M]:
 
     def __init__(self, to_json: Callable[[M], dict[str, Any]]):
         self.to_json = to_json
-        self._messages = maxdefaultdict(lambda: deque(maxlen=MAX_MESSAGES), maxlen=MAX_KEYS)
-        self._listeners = maxdefaultdict(lambda: deque(maxlen=MAX_LISTENERS), maxlen=MAX_KEYS)
-        self._global_listeners = deque(maxlen=MAX_LISTENERS)
+        self._messages = defaultdict(lambda: deque())
+        self._listeners = defaultdict(lambda: deque())
+        self._global_listeners = deque()
 
     def add_listener(self, key: K, listener: Callable[[M], None]) -> None:
         self._listeners[key].append(listener)

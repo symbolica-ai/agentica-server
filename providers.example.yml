@@ -1,0 +1,5 @@
+- endpoint: https://api.openai.com/v1/responses
+  token: ${oc.env:OPENAI_API_KEY}
+  model_pattern: openai/*
+- endpoint: https://openrouter.ai/api/v1/responses
+  token: ${oc.env:OPENROUTER_API_KEY}

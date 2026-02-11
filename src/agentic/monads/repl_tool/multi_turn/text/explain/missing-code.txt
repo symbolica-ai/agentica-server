@@ -1,5 +1,12 @@
 No code executed.
+{%- if uses_tool_calls %}
+- You have sent a message with no tool calls;
+- this is not acceptable unless you have been told to return a `str`, which you have not;
+- in this case you must return a {{ return_type }}, which can only be done via a `python` tool call;
+- if your task is impossible and you give up, you should use the `python` tool to raise an `AgentError` instead.
+{%- else %}
 - You have sent a message with no code blocks;
 - this is not acceptable unless you have been told to return a `str`, which you have not;
 - in this case you must return a {{ return_type }}, which can only be done via a code block;
 - if your task is impossible and you give up, you should raise an `AgentError` instead.
+{%- endif %}

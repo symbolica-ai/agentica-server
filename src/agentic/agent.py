@@ -14,16 +14,15 @@ from agentica_internal.multiplex_protocol.multiplex_protocol import (
     MultiplexErrorMessage,
     MultiplexServerInstanceMessage,
 )
-from agentica_internal.session_manager_messages import PromptTemplate, ReasoningEffort
+from agentica_internal.session_manager_messages import CacheTTL, PromptTemplate, ReasoningEffort
 
-from com.apis import API
-from com.context import Context, GenModel
-from inference.endpoint import InferenceEndpoint
+from com.context import Context, InferenceConfig
+from inference.endpoint import InferenceSystem
 from messages import InvocationNotifier
 from sandbox import Sandbox, SandboxMode
 
 from .models import ProviderModel
-from .monads import AgentMonads, model_router
+from .monads import AgentMonads
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +46,10 @@ class Agent:
     api_key: str | None
 
     fresh_id: Callable[[], str]
-    inference_endpoint: InferenceEndpoint
+    inference_system: InferenceSystem
     sandbox: Sandbox
     inference_context: Context
     model: ProviderModel
-    json: bool
     always_streaming: bool
     premise_prompt: str | None
     system_prompt: str | PromptTemplate | None
@@ -67,8 +65,8 @@ class Agent:
 
     # callbacks
     _send_gen_err: Callable[[GenerationError], Awaitable[None]] | None
-    _send_message: Callable[[MultiplexDataMessage], Awaitable[None]]
-    _recv_message: Callable[[], Awaitable[MultiplexClientInstanceMessage]]
+    _send_message: Callable[[MultiplexDataMessage], Awaitable[None]] | None
+    _recv_message: Callable[[], Awaitable[MultiplexClientInstanceMessage]] | None
 
     # task
     _tasks: list[asyncio.Task[None]]
@@ -84,9 +82,8 @@ class Agent:
         uid: str,
         protocol: str,
         fresh_id: Callable[[], str],
-        inference_endpoint: InferenceEndpoint,
+        inference_system: InferenceSystem,
         model: ProviderModel,
-        json: bool,
         always_streaming: bool,
         premise: str | None,
         system: str | PromptTemplate | None,
@@ -95,6 +92,7 @@ class Agent:
         max_rounds: int | None,
         warp_globals_payload: bytes,
         reasoning_effort: ReasoningEffort | None = None,
+        cache_ttl: CacheTTL | None = None,
         sandbox_mode: SandboxMode = 'from_env',
         session_id: str | None = None,
         session_manager_id: str | None = None,
@@ -112,15 +110,16 @@ class Agent:
         self.log(".init(", colorize(uid), ")")
 
         self.fresh_id = fresh_id
-        self.inference_endpoint = inference_endpoint
+        self.inference_system = inference_system
         self.model = model
-        self.json = json
         self.always_streaming = always_streaming
         self.premise_prompt = premise
         self.system_prompt = system
         self.warp_globals_payload = warp_globals_payload
 
         self._send_gen_err = None
+        self._send_message = None
+        self._recv_message = None
         self._sandbox_lock = asyncio.Lock()
         self._tasks = []
         self._pending = asyncio.Queue()
@@ -139,31 +138,34 @@ class Agent:
             log_inherit=sandbox_log_path is None,
         )
         sandbox.set_exception_handler(self.handle_exception)
+
+        # Set tool support flag for prompts.
+        # Only OpenAI models support custom tools (even via OpenRouter's Responses API).
+        sandbox.session_info.supports_custom_tools = inference_system.uses_tool_calls
+
         max_tokens = max_tokens_per_invocation
         max_inference_tokens = max_tokens_per_round
-        gen_model = GenModel(
+
+        inference_config = InferenceConfig(
             iid=uid,  # TODO: what is this supposed to be?
             model=model.endpoint_identifier,
-            deltas=[],
-            api=API.OPENAI_CHAT_COMPLETIONS,  # NOTE: this is default for openrouter endpoint for now.
             max_rounds=max_rounds,
-            inference_rounds_count=0,
             max_invocation_tokens=max_tokens,
             max_inference_tokens=max_inference_tokens,
             max_completion_tokens=max_tokens,
-            guided=json,  # TODO: currently this is tied to json mode.
             streaming=always_streaming,
             reasoning_effort=reasoning_effort,
-            endpoint=inference_endpoint,
+            cache_ttl=cache_ttl,
             send_gen_err=self.send_gen_error,
         )
         self.inference_context = Context(
-            gen=gen_model,
+            inference_config=inference_config,
             sandbox=sandbox,
             protocol=protocol,
+            system=inference_system,
         )
         self._tasks = []
-        self._interactions = model_router(model, json)
+        self._interactions = AgentMonads.from_model(model)
 
         self._timestamp = datetime.now()
         self._was_closed = False
@@ -190,7 +192,11 @@ class Agent:
     async def fill_inbox(self) -> None:
         while True:
             self.log(f"fill_inbox awaiting message")
-            msg = await self._recv_message()
+            recv_msg = self._recv_message
+            if recv_msg is None:
+                self.log_error('recv_msg gone, ending task')
+                return
+            msg = await recv_msg()
             self.log(f"fill_inbox got message:", msg)
             if type(msg) is not MultiplexDataMessage:
                 continue
@@ -202,7 +208,7 @@ class Agent:
 
     async def _ensure_system_message(self) -> None:
         """Ensure the system message is set in the inference context."""
-        if self.inference_context.gen.deltas:
+        if self.inference_context.system.has_messages:
             return
         await self.inference_context.repl_update(
             globals_data=self.warp_globals_payload,
@@ -215,21 +221,29 @@ class Agent:
 
     async def warp_recv_bytes(self) -> bytes:
         self.log("warp_recv_bytes()")
-        data = await self._pending.get()
+        pending = self._pending
+        if self._recv_message is None:
+            if pending.empty():
+                self.log("Agent was closed, and no pending messages, raising exception for WASM")
+                raise RuntimeError('Cannot receive: Agent was closed')  # should be caught by WASM
+            else:
+                self.log("Agent was closed, but still have pending messages")
+        data = await pending.get()
         self.log("warp_recv_bytes() ->", data)
         return data
 
     async def warp_send_bytes(self, payload: bytes) -> None:
+        send_msg = self._send_message
+        if send_msg is None:
+            self.log("Agent was closed, raising exception for WASM")
+            raise RuntimeError('Cannot send: Agent was closed')  # should be caught by WASM
         self.log("warp_send_bytes:", payload)
         msg = MultiplexDataMessage(
             uid=self.uid,
             iid=self.iid,
             data=payload,
         )
-        if send_msg := self._send_message:
-            await send_msg(msg)
-        else:
-            self.log_error('send_message gone, cannot send', msg)
+        await send_msg(msg)
 
     async def send_gen_error(self, err: GenerationError) -> None:
         self.log(f"send_gen_error ({self.iid}):", err)
@@ -260,7 +274,7 @@ class Agent:
         finally:
             # Guard against inference_context being deleted by close() during cancellation
             if hasattr(self, 'inference_context'):
-                self.inference_context.gen.finish_invocation()
+                self.inference_context.inference_config.finish_invocation()
             self.log("call() exited")
 
     def cancel(self, iid: str | None = None) -> None:
@@ -278,8 +292,27 @@ class Agent:
     def done(self) -> bool:
         return len(self._tasks) == 1
 
+    def _cleanup_references(self) -> None:
+        """Clean up circular references and resources. Shared by close() and aclose()."""
+        # Break circular reference: agent -> sandbox -> bound methods -> agent
+        del self.sandbox
+        try:
+            self._pending.put_nowait(b'')  # Sentinel to wake up waiters
+        except Exception as e:
+            logger.debug(f"Failed to send sentinel to pending queue during cleanup: {e}")
+        del self._pending
+        self._tasks.clear()
+        del self.inference_context
+        self._send_gen_err = None
+        self._send_message = None
+        self._recv_message = None
+        del self._interactions
+
     def close(self) -> None:
-        """Clean up the sandbox and its resources."""
+        """Synchronous close - best effort, does not wait for guest shutdown.
+
+        Use aclose() in async contexts for proper coordination.
+        """
         self._was_closed = True
         self.log("close()")
         try:
@@ -292,27 +325,25 @@ class Agent:
         except Exception as e:
             logger.warning(f"Error closing agent {self.uid}: {e}")
         finally:
-            # Break circular reference: agent -> sandbox -> bound methods -> agent
-            del self.sandbox
-            # Wake up any coroutines waiting on pending queue before deleting it
-            # This allows warp_recv_bytes() coroutines to complete instead of hanging
-            try:
-                self._pending.put_nowait(b'')  # Sentinel to wake up waiters
-            except:
-                pass
-            # Clear the pending queue to release any waiting coroutines
-            del self._pending
-            # Clear task list to release coroutine objects
-            self._tasks.clear()
-            # Clear inference context which may hold references to coroutines
-            del self.inference_context
-            # Clear callback closures that might capture references
-            self._send_gen_err = None
-            del self._send_message
-            del self._recv_message
-            # Clear interactions/monads
-            del self._interactions
+            self._cleanup_references()
         self.log("closed()")
+
+    async def aclose(self) -> None:
+        """Async close - waits for guest to process shutdown before cleanup."""
+        self._was_closed = True
+        self.log("aclose()")
+        try:
+            # Clear exception handler to break circular reference
+            self.sandbox.set_exception_handler(None)
+            await self.sandbox.aclose()
+            # Reset guest state after each invocation to prevent state leakage
+            if hasattr(self.sandbox, 'reset_guest_state'):
+                self.sandbox.reset_guest_state()
+        except Exception as e:
+            logger.warning(f"Error closing agent {self.uid}: {e}")
+        finally:
+            self._cleanup_references()
+        self.log("aclosed()")
 
     def __del__(self) -> None:
         if not self._was_closed:
@@ -399,8 +430,8 @@ class Agent:
 
         self.inference_context.monad_log = monad_log
         self.inference_context.invocation = invocation_notifier
-        self.inference_context.gen.iid = iid
-        self.inference_context.gen.streaming = self.always_streaming or streaming
+        self.inference_context.inference_config.iid = iid
+        self.inference_context.inference_config.streaming = self.always_streaming or streaming
         invocation_notifier.with_agent_metadata(
             model=self.model.identifier,
             provider=self.model.provider,

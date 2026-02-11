@@ -28,7 +28,7 @@ async def build_wasm():
     _ = await sandbox.repl_dir_vars()
     print("WASM is now compiled")
 
-    sandbox.close()
+    await sandbox.aclose()
 
 
 if __name__ == "__main__":

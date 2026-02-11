@@ -412,17 +412,28 @@ async def agent_create(request: Request, data: CreateAgentRequest) -> str | Resp
         agent_creations_total.labels(model=model, status=status).inc()
         agent_creation_duration_seconds.labels(model=model).observe(duration)
 
+    # Build JSON response with uid and session_manager_id
+    response_data = {
+        "uid": uid,
+        "session_manager_id": session_manager_id,
+    }
+
     if version_status == VersionStatus.DEPRECATED:
         return Response(
-            content=uid,
+            content=json.dumps(response_data),
             status_code=201,
+            media_type="application/json",
             headers={
                 "X-SDK-Warning": "deprecated",
                 "X-SDK-Upgrade-Message": format_upgrade_message(protocol.sdk, protocol.version),
             },
         )
 
-    return uid
+    return Response(
+        content=json.dumps(response_data),
+        status_code=201,
+        media_type="application/json",
+    )
 
 
 @websocket(path="/socket")

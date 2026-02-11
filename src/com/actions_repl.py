@@ -31,8 +31,8 @@ class ReplRunCode(Action['ReplEvaluationInfo']):
     code: str
     opts: dict[str, bool | int | str | float | None]
 
-    async def perform(self, ctx: Context) -> object:
-        return await ctx.sandbox.repl_run_code(self.code, iid=ctx.gen.iid, **self.opts)
+    async def perform(self, ctx: Context) -> Any:
+        return await ctx.sandbox.repl_run_code(self.code, iid=ctx.inference_config.iid, **self.opts)
 
 
 # ------------------------------------------------------------------------------
@@ -104,12 +104,12 @@ class ReplCallMethod(Action[Any]):
 
     method: str
     args: tuple[object, ...] = ()
-    kwargs: dict[str, object] = field(default_factory=dict)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
     async def perform(self, ctx: Context) -> Any:
         args, kwargs = self.args, self.kwargs
         # TODO: uncomment this when JSON-mode is re-enabled
-        # args = tuple(ctx.gen.iid if a is IID_TOKEN else a for a in self.args)
+        # args = tuple(ctx.inference_config.iid if a is IID_TOKEN else a for a in self.args)
         return await ctx.sandbox.repl_call_method(self.method, *args, **kwargs)
 
 
@@ -139,8 +139,8 @@ class ReplRaiseOrReturnVar(Action[None]):
     var_name: str
     is_raise: bool
 
-    async def perform(self, ctx: Context) -> object:
+    async def perform(self, ctx: Context) -> Any:
         if self.is_raise:
-            return await ctx.sandbox.repl_raise_var(ctx.gen.iid, self.var_name)
+            return await ctx.sandbox.repl_raise_var(ctx.inference_config.iid, self.var_name)
         else:
-            return await ctx.sandbox.repl_return_var(ctx.gen.iid, self.var_name)
+            return await ctx.sandbox.repl_return_var(ctx.inference_config.iid, self.var_name)

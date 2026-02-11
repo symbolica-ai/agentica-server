@@ -175,10 +175,10 @@ class SandboxTestContext(LogBase):
             tprint(f"{self!r} encountered exception {exc_type.__name__}:")
             print_exception(exc_val)
         with self.log_as('async_exit') as ctx:
-            self.__shutdown__()
+            await self.__shutdown__()
 
-    def __shutdown__(self):
-        self._sandbox.close()
+    async def __shutdown__(self):
+        await self._sandbox.aclose()
         self._sdk_world.close()
         del self._sandbox
         del self._sdk_world

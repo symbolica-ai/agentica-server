@@ -1,0 +1,5 @@
+- endpoint: ${oc.env:INFERENCE_BASE_URL}/responses
+  token: ${oc.env:DEFAULT_INFERENCE_TOKEN}
+  model_pattern: openai/*
+- endpoint: ${oc.env:INFERENCE_BASE_URL}/chat/completions
+  token: ${oc.env:DEFAULT_INFERENCE_TOKEN}

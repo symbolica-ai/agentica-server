@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from openai.types.responses import ResponseUsage
+
 
 @dataclass(slots=True)
 class GenAIUsage:
@@ -11,6 +13,8 @@ class GenAIUsage:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    cached_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
     def to_payload(self) -> dict[str, int]:
         payload: dict[str, int] = {}
@@ -24,18 +28,52 @@ class GenAIUsage:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GenAIUsage":
+        # Support both Chat Completions (prompt_tokens/completion_tokens) and
+        # Responses API (input_tokens/output_tokens) field names
+        cached_tokens = None
+        reasoning_tokens = None
+        if input_details := data.get("input_tokens_details"):
+            cached_tokens = _int_or_none(input_details.get("cached_tokens"))
+        if output_details := data.get("output_tokens_details"):
+            reasoning_tokens = _int_or_none(output_details.get("reasoning_tokens"))
         return cls(
-            prompt_tokens=_int_or_none(data.get("prompt_tokens")),
-            completion_tokens=_int_or_none(data.get("completion_tokens")),
+            prompt_tokens=_int_or_none(data.get("prompt_tokens") or data.get("input_tokens")),
+            completion_tokens=_int_or_none(
+                data.get("completion_tokens") or data.get("output_tokens")
+            ),
             total_tokens=_int_or_none(data.get("total_tokens")),
+            cached_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
         }
+        # Include token details in nested structure for client-side _fetch_usage
+        if self.cached_tokens is not None:
+            result["input_tokens_details"] = {"cached_tokens": self.cached_tokens}
+        if self.reasoning_tokens is not None:
+            result["output_tokens_details"] = {"reasoning_tokens": self.reasoning_tokens}
+        return result
+
+    @classmethod
+    def from_response_usage(cls, usage: ResponseUsage) -> "GenAIUsage":
+        cached_tokens = None
+        reasoning_tokens = None
+        if usage.input_tokens_details:
+            cached_tokens = usage.input_tokens_details.cached_tokens
+        if usage.output_tokens_details:
+            reasoning_tokens = usage.output_tokens_details.reasoning_tokens
+        return cls(
+            prompt_tokens=usage.input_tokens,
+            completion_tokens=usage.output_tokens,
+            total_tokens=usage.total_tokens,
+            cached_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
+        )
 
 
 @dataclass(slots=True)

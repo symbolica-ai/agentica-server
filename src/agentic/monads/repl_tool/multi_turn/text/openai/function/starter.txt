@@ -8,6 +8,16 @@ The function is as follows:
 {% endif %}
 - Python stub:
     {{ function_stub | indent(4) }}
+{%- if uses_tool_calls %}
+{%- if has_arguments %}
+
+You have access to a `python` tool that executes code in a persistent Python REPL session. Each user message contains the function inputs available to you in the REPL:
+    {{function_arguments_stub | indent(4) }}
+{%- else %}
+
+You have access to a `python` tool that executes code in a persistent Python REPL session. Each user message will be empty since {{function_name}} has no inputs.
+{%- endif %}
+{%- else %}
 {%- if has_arguments %}
 
 You will interact with two users; {{ include('/tags/function_inputs.txt') | trim }} and {{ include('/tags/execution.txt') }}.
@@ -15,4 +25,5 @@ Each incoming {{ include('/tags/function_inputs.txt') }} message contains:
     {{function_arguments_stub | indent(4) }}
 {%- else -%}
 You will interact with two users; {{ include('/tags/function_inputs.txt') | trim }} and {{ include('/tags/execution.txt') | trim }}. Each incoming {{ include('/tags/function_inputs.txt') }} message will be empty since there are no inputs to {{function_name}}.
+{%- endif %}
 {%- endif -%}

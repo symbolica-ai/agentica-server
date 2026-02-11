@@ -12,6 +12,7 @@ from agentica_internal.session_manager_messages.session_manager_messages import 
     SMInferenceUsageMessage,
     SMMonadMessage,
 )
+from openai.types.responses import ResponseUsage
 
 from .genai_events import GenAIChatEvent, GenAIDeltaEvent, GenAIToolEvent, GenAIUsage
 from .notifier import Notifier
@@ -169,12 +170,10 @@ class InvocationNotifier:
             )
         )
 
-    async def log_usage(self, usage: GenAIUsage) -> None:
+    async def log_usage(self, usage: ResponseUsage) -> None:
         await self.log_message(
             SMInferenceUsageMessage(
-                uid=self.uid,
-                iid=self.iid,
-                usage=usage.to_dict(),
+                uid=self.uid, iid=self.iid, usage=usage.model_dump(exclude_none=True)
             )
         )
 
@@ -239,7 +238,7 @@ class InvocationNotifier:
         request: dict[str, Any] | None = None,
         response: dict[str, Any] | None = None,
         output_messages: list[dict[str, Any]] | None = None,
-        usage: GenAIUsage | None = None,
+        usage: ResponseUsage | None = None,
         streaming: bool | None = None,
         server_address: str | None = None,
         server_port: int | None = None,
@@ -262,7 +261,7 @@ class InvocationNotifier:
             provider=self._provider,
             input_messages=messages,
             output_messages=out_msgs,
-            usage=usage_obj,
+            usage=usage and GenAIUsage.from_response_usage(usage) or None,
             streaming=stream_flag,
             request=req if req else None,
             response=response,

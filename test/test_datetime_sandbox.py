@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_exec(make_dummy_sandbox):
-    with make_dummy_sandbox(
+    async with make_dummy_sandbox(
         logging=False,
     ) as sb:
         out, stdout, stderr = await sb.repl_exec("""

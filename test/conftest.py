@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from os import getenv
 from typing import TYPE_CHECKING
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def make_dummy_sandbox():
     def _make(
         logging=False,
-    ) -> AbstractContextManager['Sandbox']:
+    ) -> AbstractAsyncContextManager['Sandbox']:
         from sandbox import Sandbox
 
         async def _dummy_send_bytes(payload: bytes) -> None:
@@ -24,8 +24,8 @@ def make_dummy_sandbox():
             while True:
                 await asyncio.sleep(0)
 
-        @contextmanager
-        def _context():
+        @asynccontextmanager
+        async def _context():
             sandbox = Sandbox(
                 sdk_send_bytes=_dummy_send_bytes,
                 sdk_recv_bytes=_dummy_recv_bytes,
@@ -35,7 +35,7 @@ def make_dummy_sandbox():
             try:
                 yield sandbox
             finally:
-                sandbox.close()
+                await sandbox.aclose()
 
         return _context()
 

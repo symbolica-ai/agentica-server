@@ -5,13 +5,11 @@ from typing import TYPE_CHECKING
 import yaml
 from agentica_internal.core.mixin import mixin
 
-from agentic.monads.common import REPL_TXT_DIR, text_between, text_not_between
-from agentic.monads.safe_formatter import SafeFormatter
+from agentic.monads.common import REPL_TXT_DIR, text_not_between
 from com.abstract import HistoryMonad
-from com.deltas import *
 from com.do import do
 from com.monads import *
-from com.roles import AgentRole, SystemRole, UserRole
+from inference.endpoint import Generation
 
 from ... import prompter
 from ...prompter import *
@@ -44,11 +42,11 @@ type PromptType = 'str | PromptTemplate'
 
 
 def _user_execution(text: str):
-    return insert_string(text, name=UserRole("execution"))
+    return insert_string(text, ('user', 'execution'))
 
 
 def _user_instructions(text: str):
-    return insert_string(text, name=UserRole("instructions"))
+    return insert_string(text, ('user', 'instructions'))
 
 
 @do(HistoryMonad[None])
@@ -86,7 +84,7 @@ def system_monad(
     session: ReplSessionInfo = yield repl_session_info()
     template_dir = _template_dir()
     prompt = yield _system_prompt(template_dir, premise=premise, system=system)
-    yield insert_string(prompt, name=SystemRole())
+    yield insert_string(role='system', content=prompt)
 
     if system is not None or session.is_function:
         return
@@ -96,7 +94,17 @@ def system_monad(
 
 @do(HistoryMonad[None])
 def _few_shot_examples():
-    """Insert few-shot examples from explain/few-shot.yaml into the conversation."""
+    """Insert few-shot examples from explain/few-shot.yaml into the conversation.
+
+    Supports two output formats based on session.uses_tool_calls:
+    - Tool call mode: assistant code is emitted as function_call items
+    - Markdown mode: assistant code is embedded in ```python blocks
+
+    YAML format supports:
+    - `text`: reasoning/explanation (optional)
+    - `code`: Python code to execute (optional)
+    - `value`: backward-compat markdown format or dict for instructions
+    """
     session: ReplSessionInfo = yield repl_session_info()
 
     # Load the user.txt template for rendering instructions
@@ -104,101 +112,145 @@ def _few_shot_examples():
     env = _template_jinja_env(template_dir)
     user_template = env.get_template("user.txt")
 
-    # Collect available template variables
-    session_vars = session.__template_vars__()
-    user_vars = _get_all_template_variables(env, "user.txt")
-    available_vars = session_vars | user_vars
-
     # Load few-shot examples from YAML (render through Jinja first for includes)
     few_shot_file = REPL_TXT_DIR / "explain" / "few-shot.yaml"
     if not few_shot_file.exists():
         return
 
     few_shot_raw = few_shot_file.read_text()
-    few_shot_rendered = env.from_string(few_shot_raw).render()
+    few_shot_rendered = env.from_string(few_shot_raw).render(session.__dict__)
     examples = yaml.safe_load(few_shot_rendered)
 
     for example in examples:
         role = example["role"]
-        value = example["value"]
 
         if role == 'instructions':
             # Render the user template with the provided variables
+            value = example["value"]
             assert isinstance(value, dict)
             # security notice: all templates AND variables are completely controlled by *us*
-            value = user_template.render(**value)
+            rendered = user_template.render(**value)
+            yield _user_instructions(dedent(rendered).strip())
 
-        value = dedent(value).strip()
+        elif role == 'assistant':
+            text = example.get("text", "")
+            code = example.get("code")
+            value = example.get("value")  # backward-compat markdown format
+            final = example.get("final", False)
 
-        if role == 'assistant':
-            yield insert_string(value, name=AgentRole())
-        elif role == 'instructions':
-            yield _user_instructions(value)
+            if session.uses_tool_calls:
+                if code:
+                    # Emit as function_call
+                    yield insert_function_call("python", dedent(code).strip(), text)
+                    if final:
+                        yield insert_execution_result("[Result returned to user]")
+                elif text and not value:
+                    # Text-only assistant turn (no code) - emit as regular message
+                    # First close any pending tool call
+                    yield insert_string(role='assistant', content=dedent(text).strip())
+                elif value:
+                    # Backward-compat: value contains markdown with multiple code blocks
+                    # Skip this in tool call mode (multiple code blocks don't apply)
+                    # Also skip the pending call_id tracking since we're skipping this turn
+                    pass
+            else:
+                # Markdown mode
+                if value:
+                    # Use value directly (backward compat)
+                    content = dedent(value).strip()
+                else:
+                    # Construct markdown from text + code
+                    content = dedent(text).strip() if text else ""
+                    if code:
+                        code_block = f"```python\n{dedent(code).strip()}\n```"
+                        content = f"{content}\n{code_block}" if content else code_block
+                if content:
+                    yield insert_string(role='assistant', content=content)
+
         elif role == 'execution':
-            yield _user_execution(value)
+            value = dedent(example["value"]).strip()
+            if session.uses_tool_calls:
+                # Emit as function_call_output
+                yield insert_execution_result(value)
+            elif not session.uses_tool_calls:
+                # Emit as user message (markdown mode)
+                yield _user_execution(value)
+            # If uses_tool_calls but no pending_call_id, skip (orphan execution)
+
         else:
             raise ValueError(f"Invalid role: {role}")
 
 
 @do(HistoryMonad[None])
 def interaction_monad():
-    user_execution = _user_execution
-
     session: ReplSessionInfo = yield repl_session_info()
 
     # Let the agent execute some code and gain feedback in a loop.
     while True:
-        response: GeneratedDelta = yield model_inference()
-        yield insert_delta(response)
+        response: Generation = yield model_inference()
 
-        if not response.content:
+        # Code is extracted by InferenceSystem (from tool call or markdown)
+        code_block: str | None = response.code
+
+        # If no content AND no code, show empty-response error.
+        # Note: When using tool calls, output_text may be empty but code is present.
+        if not response.content and not code_block:
             msg = yield _explain("empty-response.txt")
-            yield user_execution(msg)
+            yield insert_execution_result(msg)
             continue
 
-        code_blocks = list(text_between(response.content, "```python", "```"))
-        if not code_blocks and session.is_returning_text:
-            # if agent provided clean response and the return type is a string,
-            # treat it as an attempt to return the string
+        # Special case: if returning text and no code found, treat clean response as return
+        if code_block is None and session.is_returning_text:
             *_, content = text_not_between(response.content, "<thinking>", "</thinking>")
             *_, content = text_not_between(
                 content, "<implementation_analysis>", "</implementation_analysis>"
             )
             if content := content.strip():
-                code_blocks = [f"return {content!r}"]
+                code_block = f"return {content!r}"
 
-        if not code_blocks:
+        if code_block is None:
             msg = yield _explain("missing-code.txt")
-            yield user_execution(msg)
+            yield insert_execution_result(msg)
             continue
-
-        code_block, *extra = code_blocks
 
         exec_id = yield log_code_block(code_block)
         summary: ReplEvaluationInfo = yield repl_run_code(code_block)
         output: str = summary.output
         yield log_execute_result(summary.output, exec_id)
 
-        # a FutureResultMsg has been sent
+        # a FutureResultMsg has been sent - submit output then return
         if summary.has_result:
+            # When using tool calls, we MUST provide function_call_output for the tool call.
+            # Otherwise, the next turn will fail with "No tool output found for function call".
+            if session.uses_tool_calls:
+                if output and not output.isspace():
+                    yield insert_execution_result(output + "\n")
+                else:
+                    # Submit a completion marker when there's no stdout output
+                    yield insert_execution_result("[Execution completed]\n")
             return
 
-        # if no repl output provided, provide guidance
-        if not output or output.isspace():
-            msg = yield _explain("empty-output.txt")
-            yield user_execution(msg)
+        # Submit execution output for non-returning code
+        if output and not output.isspace():
+            yield insert_execution_result(output + "\n")
         else:
-            yield user_execution(output + "\n")
+            # if no repl output provided, provide guidance
+            msg = yield _explain("empty-output.txt")
+            yield insert_execution_result(msg)
 
-        # if no repl raised a SystemExit, provide guidance
+        # if repl raised a SystemExit, provide guidance
         if summary.exception_name == 'SystemExit':
             msg = yield _explain("uncaught-exit.txt")
-            yield user_execution(msg)
+            yield insert_execution_result(msg)
 
-        # if there were more code blocks, tell agent we didn't run them.
-        if extra:
+        # if there were more code blocks, tell agent we didn't run them
+        if response.extra_code_blocks > 0:
+            assert not response.code_from_tool, (
+                "Parallel tool calling is set to False, inference endpoint should never return extra code blocks."
+            )
+
             msg = yield _explain("multiple-code-blocks.txt")
-            yield user_execution(msg)
+            yield insert_execution_result(msg)
 
     yield pure()
 
@@ -208,9 +260,6 @@ def _explain(template_name: str):
     """Load an explanation template from the explain/ directory and render it with session vars."""
     template_dir = REPL_TXT_DIR / "explain"
     yield _prompt_from_file_no_vars(template_dir, template_name)
-
-
-_PROMPT_FORMATTER: SafeFormatter = SafeFormatter()
 
 
 @do(HistoryMonad[str])

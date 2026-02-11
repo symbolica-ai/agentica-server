@@ -6,14 +6,15 @@ from agentica_internal.core.log import should_log_cls
 from agentica_internal.session_manager_messages import DEFAULT_PROTOCOL
 
 from com.abstract import HistoryMonad
-from com.gen_model import GenModel
+from com.gen_model import InferenceConfig
+from inference.endpoint import InferenceSystem
 
 if TYPE_CHECKING:
     from messages import InvocationNotifier
     from sandbox import Sandbox
 
 
-__all__ = ['Context', 'GenModel', 'SandboxRepl']
+__all__ = ['Context', 'InferenceConfig', 'SandboxRepl']
 
 
 type MonadLogFn = Callable[[str], Awaitable[None]]
@@ -26,7 +27,8 @@ class Context:
     # This is where side effects can take place as actions are executed.
 
     sandbox: 'SandboxRepl'
-    gen: 'GenModel'
+    system: 'InferenceSystem'
+    inference_config: 'InferenceConfig'
     captures: dict[str, Any]
     logging: bool
     _name: str
@@ -39,34 +41,25 @@ class Context:
     def __init__(
         self,
         *,
-        gen: 'GenModel',
         sandbox: 'Sandbox',
-        # exec: 'Exec',
+        system: 'InferenceSystem',
+        inference_config: 'InferenceConfig',
         protocol: str = DEFAULT_PROTOCOL,
         captures: dict[str, Any] | None = None,
         logging: bool = False,
         monad_log: MonadLogFn | None = None,
         invocation: 'InvocationNotifier | None' = None,
     ):
-        from com.apis import API
-        from com.conversion import Convert
-
         self.protocol = protocol
         self.monad_log = monad_log or null_monad_log
         self.invocation = invocation
         self.sandbox = sandbox
-        self.gen = gen
-        self.gen._parent = self
+        self.system = system
+        self.inference_config = inference_config
         self.captures = captures or dict()
         self.logging = should_log_cls(logging, Context)
         self._sending_system_message = False
         self._name = f'MonadContext[{sandbox.id_name if sandbox else "?"}]'
-
-        match gen.api:
-            case API.OPENAI_CHAT_COMPLETIONS:
-                self.converter = Convert.OpenAIChatCompletions()
-            case _:
-                raise ValueError(f"Invalid API: {gen.api}")
 
     def __short_str__(self) -> str:
         return self._name
@@ -111,8 +104,8 @@ class Context:
     def __str__(self) -> str:
         from textwrap import indent
 
-        gen_str = indent(str(self.gen), '\t')
-        return f'Context(\n{gen_str}\n)'
+        system_str = indent(str(self.system), '\t')
+        return f'Context(\n{system_str}\n)'
 
 
 async def null_monad_log(_: str) -> None:

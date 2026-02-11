@@ -11,7 +11,7 @@ async def test_log_file(is_local_runner):
     tmp_file.unlink(missing_ok=True)
     sb = Sandbox.testing_sandbox(log_path=tmp_file, log_inherit=False, log_tags='AgentRepl+repl')
     await sb.repl_run_code('1 + 1')
-    sb.close()
+    await sb.aclose()
     log_text = sb.read_log_file(ansi=False)
     assert "AgentRepl[" in log_text
     assert "AgentWorld[" not in log_text  # verify log_tags had an effect
@@ -47,7 +47,7 @@ async def test_exec(make_dummy_sandbox, is_local_runner):
     fail_calls: list[str] = []
     exit_calls: int = 0
 
-    with make_dummy_sandbox(
+    async with make_dummy_sandbox(
         logging=False,
     ) as sb:
         # 1) Single-line expression shows value via displayhook
@@ -81,7 +81,7 @@ async def test_exec(make_dummy_sandbox, is_local_runner):
 
 @pytest.mark.asyncio
 async def test_async_await(make_dummy_sandbox):
-    with make_dummy_sandbox(logging=False) as sb:
+    async with make_dummy_sandbox(logging=False) as sb:
         code = """
 async def foo():
     return 'OK'
@@ -99,7 +99,7 @@ print(value)
 
 @pytest.mark.asyncio
 async def test_locals(make_dummy_sandbox):
-    with make_dummy_sandbox(logging=False) as sb:
+    async with make_dummy_sandbox(logging=False) as sb:
         _ = await sb.repl_exec("def f(x: str) -> str: ...")
 
         xs = await sb.repl_dir_vars()

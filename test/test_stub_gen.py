@@ -328,6 +328,7 @@ async def test_overload_stub_generation_warp():
         assert fmt_X == (
             dedent('''
             class X:
+                def __init__(self): ...
                 @overload
                 def bar(self, x: int) -> int:
                     """i love ints"""

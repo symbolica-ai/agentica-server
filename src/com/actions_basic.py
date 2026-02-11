@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agentica_internal.session_manager_messages import AllServerMessage
 from agentica_internal.session_manager_messages.session_manager_messages import (
@@ -9,12 +9,7 @@ from agentica_internal.session_manager_messages.session_manager_messages import 
 
 from com.abstract import Action
 from com.context import Context
-
-if TYPE_CHECKING:
-    # bring down load and type checker time: these are only used as annotations
-
-    from com.deltas import GenRole
-
+from com.gen_model import Role
 
 __all__ = [
     "SendLog",
@@ -24,6 +19,8 @@ __all__ = [
     "Insert",
     "Retrieve",
     "SDKIsPython",
+    "InsertExecutionResult",
+    "InsertFunctionCall",
 ]
 
 # ------------------------------------------------------------------------------
@@ -80,14 +77,18 @@ class Insert(Action[None]):
     """
 
     content: str
-    name: 'GenRole'
+    role: 'Role'
 
     async def perform(self, ctx: Context) -> None:
-        from uuid import uuid4
-
-        from com.deltas import Delta
-
-        await ctx.gen.push_delta(Delta(id=str(uuid4()), name=self.name, content=self.content))
+        ctx.system.insert(self.role, self.content)
+        # Log the delta for the client's echo stream (restored from GenModel.push_delta)
+        info: dict[str, Any] = {
+            'role': self.role[0] if isinstance(self.role, tuple) else self.role,
+            'content': self.content,
+        }
+        if isinstance(self.role, tuple) and self.role[1] is not None:
+            info['username'] = self.role[1]
+        await ctx.log('delta', info)
 
 
 # ------------------------------------------------------------------------------
@@ -129,3 +130,47 @@ class Retrieve(Action[Any]):
 
     async def perform(self, ctx: Context) -> Any:
         return ctx.captures[self.variable]
+
+
+# ------------------------------------------------------------------------------
+
+
+@dataclass
+class InsertExecutionResult(Action[None]):
+    """Insert code execution result into the conversation.
+
+    Delegates to the InferenceSystem which handles the appropriate format:
+    - ResponsesSystem: tries tool result first, falls back to user message
+    - ChatCompletionsSystem: always inserts as user message
+    """
+
+    output: str
+
+    async def perform(self, ctx: Context) -> None:
+        ctx.system.insert_execution_result(self.output)
+        # Log the delta for the client's echo stream (execution output includes stdout)
+        info: dict[str, Any] = {
+            'role': 'user',
+            'content': self.output,
+            'username': 'execution',
+        }
+        await ctx.log('delta', info)
+
+
+# ------------------------------------------------------------------------------
+
+
+@dataclass
+class InsertFunctionCall(Action[None]):
+    """Insert a synthetic function call into the conversation for few-shot examples.
+
+    This is used when uses_tool_calls=True to format few-shot examples as tool calls
+    rather than markdown code blocks.
+    """
+
+    name: str
+    code: str
+    text: str = ""
+
+    async def perform(self, ctx: Context) -> None:
+        ctx.system.insert_function_call(self.name, self.code, self.text)

@@ -2,16 +2,13 @@ import asyncio
 import random
 from asyncio import AbstractEventLoop
 from types import CoroutineType, ModuleType
-from typing import Any, Literal
 
 import typeguard  # noqa: F401
 import wit_world
+from agentica_internal.core.asserts import assert_raises
 from agentica_internal.core.log import set_log_tags, set_write_log_fn, should_log_tag
 from agentica_internal.core.print import local_print, tprint
-from agentica_internal.core.result import Result
 from agentica_internal.core.utils import is_type_like
-from agentica_internal.warpc.frame import ResourceHandle
-from agentica_internal.warpc.requests import ResourceCallSystemMethod
 from agentica_internal.warpc.worlds.agent_world import AgentWorld
 from typeguard import check_type
 
@@ -67,6 +64,7 @@ EXTRA_BUILTINS = {
     # debugging
     "remote_print": _remote_print,
     "local_print": local_print,
+    "assert_raises": assert_raises,  # replacement for pytest.raises
 }
 
 PRELOADED_MODULES = the_prelude.__modules__
@@ -179,55 +177,9 @@ def create_agent_environment(id_name: str) -> tuple[AgentWorld, AgentRepl, Abstr
     repl.preload_modules(PRELOADED_MODULES)
 
     world = AgentWorld(name=id_name, world_id=random.randint(0, 255))
-    world.register_post_request_hook(str, post_hook_str)
-    world.register_post_request_hook(repr, post_hook_repr)
     world.attach_repl(repl)
 
     world.set_loop(loop)
     repl.set_loop(loop)
 
     return world, repl, loop
-
-
-repr_recursion_guard: dict[int, Literal[True]] = dict()
-
-
-def v_object_repr(o: Any, post_value: str | None) -> str:
-    """default repr for virtual objects"""
-    if id(o) in repr_recursion_guard:
-        return '<loop>'
-    else:
-        repr_recursion_guard[id(o)] = True
-
-    try:
-        r = post_value
-        if not r:
-            r = (
-                f"{o.__class__.__qualname__}("
-                + ", ".join(f"{k!s}={getattr(o, k)!r}" for k in vars(o))
-                + ")"
-            )
-    finally:
-        del repr_recursion_guard[id(o)]
-    return r
-
-
-def v_object_str(o: Any, post_value: str | None) -> str:
-    """default str for virtual objects"""
-    return post_value if post_value else repr(o)
-
-
-def post_hook_repr(
-    post: Result, handle: ResourceHandle, request: ResourceCallSystemMethod
-) -> Result:
-    if post.is_ok:
-        return Result.good(v_object_repr(request.obj, post.value))
-    return post
-
-
-def post_hook_str(
-    post: Result, handle: ResourceHandle, request: ResourceCallSystemMethod
-) -> Result:
-    if post.is_ok:
-        return Result.good(v_object_str(request.obj, post.value))
-    return post

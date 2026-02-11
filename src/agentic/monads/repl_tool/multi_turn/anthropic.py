@@ -35,7 +35,7 @@ mixin(openai)
 
 
 def _user_execution(text: str):
-    return insert_string('<execution>\n' + text.rstrip() + '\n</execution>', name='user')
+    return insert_string('<execution>\n' + text.rstrip() + '\n</execution>', ('user', None))
 
 
 @do(HistoryMonad[None])
@@ -43,10 +43,10 @@ def _user_instructions(text: str):
     session: ReplSessionInfo = yield repl_session_info()
     is_agentic_function = session.is_function
     if is_agentic_function:
-        yield insert_string(text, name='user')
+        yield insert_string(text, ('user', None))
     else:
         yield insert_string(
-            '<instructions>\n' + indent(text.strip(), ' ' * 2) + '\n</instructions>', name='user'
+            '<instructions>\n' + indent(text.strip(), ' ' * 2) + '\n</instructions>', ('user', None)
         )
 
 

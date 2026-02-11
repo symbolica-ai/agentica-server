@@ -219,6 +219,8 @@ def _format_function_stub(
         # in the context of an originally bound method. For already-bound methods,
         # inspect.signature() has already removed the implicit first param.
         omit_first_param = bound_instance is not None and not is_method
+
+        is_init = name == '__init__'
         for idx, p in enumerate(sig.parameters.values()):
             # If the original callable was bound, mimic bound-signature by dropping first positional param
             if (
@@ -231,8 +233,14 @@ def _format_function_stub(
             ):
                 continue
             ann_str = ""
-            if p.name in ann:
-                type_obj = ann[p.name]
+
+            p_name = p.name
+            if p_name.startswith("___"):
+                # warp internal
+                continue
+
+            if p_name in ann:
+                type_obj = ann[p_name]
                 type_repr = clean_type_name(type_obj, context)
                 ann_str = f": {type_repr}"
 
@@ -246,7 +254,7 @@ def _format_function_stub(
             elif p.kind == inspect.Parameter.VAR_KEYWORD:
                 stars = "**"
 
-            params.append(f"{stars}{p.name}{ann_str}{default}")
+            params.append(f"{stars}{p_name}{ann_str}{default}")
 
         ret = ""
         if 'return' in ann:

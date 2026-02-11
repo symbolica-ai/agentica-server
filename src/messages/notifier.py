@@ -188,7 +188,6 @@ class Notifier:
                 doc=body.doc,
                 system=body.system,
                 model=body.model,
-                json=body.json,
                 streaming=body.streaming,
             )
         )

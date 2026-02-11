@@ -1,5 +1,4 @@
 from .monads_basic import *
-from .monads_model import *
 from .monads_repl import *
 
 __all__ = [
@@ -20,6 +19,8 @@ __all__ = [
     "send_log",
     "log_code_block",
     "log_execute_result",
+    "insert_execution_result",
+    "insert_function_call",
     "repl_del_var",
     "repl_has_var",
     "repl_return_var",
@@ -30,7 +31,6 @@ __all__ = [
     "is_agentic_function",
     "is_returning_text",
     "model_inference",
-    "insert_delta",
     "ReplSessionInfo",
     "ReplEvaluationInfo",
 ]

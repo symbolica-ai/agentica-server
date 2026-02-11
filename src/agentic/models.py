@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from inference.endpoint import InferenceEndpoint
+if TYPE_CHECKING:
+    from inference.endpoint import InferenceSystem
 
 OPENROUTER_PREFIX = 'openrouter:'
 
@@ -13,13 +14,9 @@ class ProviderModel:
     identifier: str
     endpoint_identifier: str
 
-    async def validate_openrouter_model(self, endpoint: InferenceEndpoint) -> None:
+    async def validate_openrouter_model(self, endpoint: 'InferenceSystem') -> None:
         """Validate the endpoint identifier is reachable."""
-        if not endpoint.is_openrouter():
-            return
-        if await endpoint.openrouter_model_exists(self.endpoint_identifier):
-            return
-        raise BadModel(f"Invalid OpenRouter model: `{self.endpoint_identifier}`")
+        pass  # TODO: if we deem this functionality useful, we can re-implement it
 
     @classmethod
     def parse_openrouter(cls, pro_mod: str) -> 'ProviderModel':
@@ -43,9 +40,8 @@ class ProviderModel:
             # just default to openrouter, even without the `openrouter:` prefix
             return cls.parse_openrouter(pro_mod)
 
-        # Future-proof: we most likely want to directly use the OpenAI and Anthropic APIs,
-        # instead of always going through OpenRouter. For now, we just use OpenRouter.
-        TO_OPENROUTER = {
+        # Canonical model identifiers in provider/model format
+        KNOWN_MODELS = {
             'openai': {
                 'gpt-3.5-turbo': 'openai/gpt-3.5-turbo-instruct',
                 'gpt-4o': 'openai/gpt-4o',
@@ -62,17 +58,17 @@ class ProviderModel:
 
         provider, model = pro_mod.split(':', 1)
 
-        if provider not in TO_OPENROUTER:
+        if provider not in KNOWN_MODELS:
             raise BadModel(f"Invalid provider: `{provider}`")
-        if model not in TO_OPENROUTER[provider]:
+        if model not in KNOWN_MODELS[provider]:
             raise BadModel(f"Invalid `{provider}` model: `{model}`")
 
-        endpoint_identifier = TO_OPENROUTER[provider][model]
+        endpoint_identifier = KNOWN_MODELS[provider][model]
 
         return cls(
-            provider=provider,  # type: ignore
-            model=model,  # type: ignore
-            identifier=pro_mod,  # type: ignore
+            provider=provider,
+            model=model,
+            identifier=pro_mod,
             endpoint_identifier=endpoint_identifier,
         )
 

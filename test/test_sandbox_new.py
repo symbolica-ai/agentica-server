@@ -46,7 +46,7 @@ cannot return value: expected str, got int
     assert stdout == ''
     assert stderr == ''
 
-    sandbox.close()
+    await sandbox.aclose()
 
 
 def foo():

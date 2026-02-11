@@ -59,6 +59,16 @@ def captured_messages():
 
 
 @pytest.fixture
+def suppress_multiplexer_logs():
+    import logging
+
+    logger = logging.getLogger('server_session_manager.multiplexer')
+    logger.setLevel(logging.CRITICAL)
+    yield
+    logger.setLevel(logging.ERROR)
+
+
+@pytest.fixture
 def mock_server_session_ctx(captured_messages):
     """Create a mock ServerSessionContext with empty agents."""
     ctx = MagicMock(spec=ServerSessionContext)
@@ -107,7 +117,9 @@ def create_multiplexer(
 
 
 @pytest.mark.asyncio
-async def test_invoke_with_unknown_uid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_invoke_with_unknown_uid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     When receiving an invoke with unknown uid, multiplexer sends MalformedInvokeMessageError.
     """
@@ -131,7 +143,9 @@ async def test_invoke_with_unknown_uid_sends_error(mock_server_session_ctx, capt
 
 
 @pytest.mark.asyncio
-async def test_invoke_with_empty_uid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_invoke_with_empty_uid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     When receiving an invoke with empty uid, multiplexer sends MalformedInvokeMessageError.
     """
@@ -155,7 +169,9 @@ async def test_invoke_with_empty_uid_sends_error(mock_server_session_ctx, captur
 
 
 @pytest.mark.asyncio
-async def test_cancel_with_unknown_iid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_cancel_with_unknown_iid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     When receiving a cancel with unknown iid, multiplexer sends NotRunningError.
     """
@@ -177,7 +193,9 @@ async def test_cancel_with_unknown_iid_sends_error(mock_server_session_ctx, capt
 
 
 @pytest.mark.asyncio
-async def test_data_with_unknown_iid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_data_with_unknown_iid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     When receiving data with unknown iid, multiplexer sends NotRunningError.
     """
@@ -200,7 +218,9 @@ async def test_data_with_unknown_iid_sends_error(mock_server_session_ctx, captur
 
 
 @pytest.mark.asyncio
-async def test_multiple_malformed_messages(mock_server_session_ctx, captured_messages):
+async def test_multiple_malformed_messages(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     Multiple malformed messages each receive their own error response.
     """
@@ -234,7 +254,9 @@ async def test_multiple_malformed_messages(mock_server_session_ctx, captured_mes
 
 
 @pytest.mark.asyncio
-async def test_cancel_with_wrong_uid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_cancel_with_wrong_uid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     Cancel with wrong uid (iid doesn't exist) returns NotRunningError.
     """
@@ -256,7 +278,9 @@ async def test_cancel_with_wrong_uid_sends_error(mock_server_session_ctx, captur
 
 
 @pytest.mark.asyncio
-async def test_data_with_wrong_uid_sends_error(mock_server_session_ctx, captured_messages):
+async def test_data_with_wrong_uid_sends_error(
+    mock_server_session_ctx, captured_messages, suppress_multiplexer_logs
+):
     """
     Data with wrong uid (iid doesn't exist) returns NotRunningError.
     """
@@ -339,7 +363,7 @@ def create_multiplexer_with_valid_agent(
 
 @pytest.mark.asyncio
 async def test_interleaved_valid_and_invalid_invokes(
-    mock_server_session_ctx_with_valid_agent, captured_messages
+    mock_server_session_ctx_with_valid_agent, captured_messages, suppress_multiplexer_logs
 ):
     """
     Interleaved valid and invalid invoke messages.

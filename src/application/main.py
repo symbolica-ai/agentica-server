@@ -23,7 +23,6 @@ from litestar.types import ASGIApp
 
 from application.defaults import (
     DEFAULT_DISABLE_OTEL,
-    DEFAULT_ENDPOINT_URL,
     DEFAULT_INFERENCE_TOKEN,
     DEFAULT_LOG_POSTER_URL,
     DEFAULT_MAX_CONCURRENT_INVOCATIONS,
@@ -37,7 +36,8 @@ from application.http_client import close_client, init_client
 from application.routes import get_routes
 from auth import RequestLoggingMiddleware
 from messages import Poster
-from server_session_manager import ServerSessionManager
+from server_session_manager import InferenceProvider, ServerSessionManager
+from server_session_manager.provider import build_providers
 
 if TYPE_CHECKING:
     import httpx
@@ -65,6 +65,12 @@ def parse_args() -> Namespace:
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
     _ = parser.add_argument(
+        "--inference-providers",
+        type=str,
+        default=None,
+        help="Path to YAML file for inference providers. Must be list of {endpoint, token, model_pattern} objects.",
+    )
+    _ = parser.add_argument(
         "--log-poster-url",
         type=str,
         default=DEFAULT_LOG_POSTER_URL,
@@ -79,8 +85,8 @@ def parse_args() -> Namespace:
     _ = parser.add_argument(
         "--inference-endpoint",
         type=str,
-        default=DEFAULT_ENDPOINT_URL,
-        help="Inference endpoint",
+        default=None,  # default is set in ../server_session_manager/provider.py
+        help="Inference endpoint (must end with '/responses' or '/chat/completions')",
     )
     _ = parser.add_argument(
         "--port",
@@ -99,7 +105,7 @@ def parse_args() -> Namespace:
         "--max-concurrent-invocations",
         type=int,
         default=DEFAULT_MAX_CONCURRENT_INVOCATIONS,
-        help="Max concurrent invocations",
+        help="Max concurrent invocations (omitted = unlimited)",
     )
     _ = parser.add_argument(
         "--user-id",
@@ -209,9 +215,8 @@ def parse_args() -> Namespace:
 
 class SessionManager:
     log_poster_url: str
-    inference_token: str
-    inference_endpoint: str
-    max_concurrent_invocations: int
+    providers: list[InferenceProvider]
+    max_concurrent_invocations: int | None
     otel_endpoint: str
     disable_otel: bool
     sandbox_mode: SandboxMode
@@ -227,13 +232,12 @@ class SessionManager:
     def __init__(
         self,
         *,
+        providers: list[InferenceProvider],
         log_poster_url: str = DEFAULT_LOG_POSTER_URL,
-        inference_token: str = DEFAULT_INFERENCE_TOKEN,
-        inference_endpoint: str = DEFAULT_ENDPOINT_URL,
         user_id: str | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "WARNING",
         port: int = DEFAULT_PORT,
-        max_concurrent_invocations: int = DEFAULT_MAX_CONCURRENT_INVOCATIONS,
+        max_concurrent_invocations: int | None = DEFAULT_MAX_CONCURRENT_INVOCATIONS,
         otel_endpoint: str = DEFAULT_OTEL_ENDPOINT,
         disable_otel: bool = False,
         sandbox_mode: SandboxMode = 'from_env',
@@ -242,8 +246,7 @@ class SessionManager:
         silent_for_testing: bool = False,
     ):
         self.log_poster_url = log_poster_url
-        self.inference_token = inference_token
-        self.inference_endpoint = inference_endpoint
+        self.providers = providers
         self.user_id = user_id
         self.max_concurrent_invocations = max_concurrent_invocations
         self.port = port
@@ -313,8 +316,7 @@ class SessionManager:
 
         self._ssm = self._app.state.session_manager = ServerSessionManager(
             log_poster=Poster(url=log_poster_url),
-            inference_endpoint=inference_endpoint,
-            inference_token=inference_token,
+            providers=providers,
             user_id=user_id,
             tracer=tracer,
             max_concurrent_invocations=max_concurrent_invocations,
@@ -417,7 +419,7 @@ class SessionManager:
 
         return httpx.Client(
             base_url=f"{base_url}",
-            headers={"Authorization": f"Bearer {self.inference_token}"},
+            headers={"Authorization": f"Bearer {self.providers[0].client.api_key}"},
         )
 
 
@@ -459,14 +461,20 @@ async def main():
     else:
         sandbox_log_path = None
 
+    # Build providers from configuration sources
+    providers = build_providers(
+        inference_providers_path=args.inference_providers,
+        legacy_endpoint=args.inference_endpoint,
+        legacy_token=args.inference_token,
+    )
+
     sm = SessionManager(
         log_poster_url=args.log_poster_url,
-        inference_token=args.inference_token,
-        inference_endpoint=args.inference_endpoint,
+        providers=providers,
         port=args.port,
         user_id=args.user_id,
         log_level=log_level,
-        max_concurrent_invocations=args.max_concurrent_invocations,
+        max_concurrent_invocations=args.max_concurrent_invocations or None,
         otel_endpoint=args.otel_endpoint,
         disable_otel=args.disable_otel,
         sandbox_mode=args.sandbox_mode,

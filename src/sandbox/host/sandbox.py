@@ -3,7 +3,6 @@ import os
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from time import sleep
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Protocol, TextIO
 
 import msgspec.json
@@ -95,6 +94,7 @@ class Sandbox(LogBase):
     _runner_cls: type[WasmRunnerP]
     _future: asyncio.Future[None] | None
     _run_task: asyncio.Task[None] | None
+    _runner_task: asyncio.Task[None] | None  # tracks runner specifically for shutdown
 
     _lazy_init: dict[str, Any]
     _inbox: asyncio.Queue[bytes]
@@ -224,6 +224,7 @@ class Sandbox(LogBase):
         self._future = None
         self._loop = None
         self._run_task = None
+        self._runner_task = None
         self._closed = False
         self._runner_cls = runner_cls
 
@@ -270,7 +271,48 @@ class Sandbox(LogBase):
 
     ###############################################################################
 
+    def _send_quit(self, ctx: 'LogContext') -> None:
+        """Send QUIT to guest."""
+        if self._runner is not None:
+            try:
+                ctx.info('sending QUIT to ExecEnv')
+                self._inbox.put_nowait(QUIT)
+            except BaseException as exc:
+                ctx.print_exception(exc)
+
+    def _cleanup_runner(self, ctx: 'LogContext') -> None:
+        """Clean up runner resources. Called after QUIT is sent/processed."""
+        future = self._future
+        runner = self._runner
+        run_task = self._run_task
+
+        # call underlying runner close
+        if runner is not None:
+            ctx.log('closing WASMRunner')
+            runner.close()  # type: ignore[misc]
+            self._runner = None
+
+        # cancel run task if still running
+        if run_task is not None and not run_task.done():
+            ctx.log('cancelling run task')
+            run_task.cancel()  # type: ignore[misc]
+            self._run_task = None
+
+        if future is not None and not future.done():
+            ctx.info('cancelling Rust future')
+            future.cancel()
+            self._future = None
+
+        if log_stream := self._log_stream:
+            ctx.info('closing log stream')
+            log_stream.close()
+            self._log_stream = None
+
     def close(self) -> None:
+        """Synchronous close - best effort, does not wait for guest shutdown.
+
+        Use aclose() in async contexts for proper coordination.
+        """
         if self._closed:
             return
         self._closed = True
@@ -282,41 +324,39 @@ class Sandbox(LogBase):
             self._sdk_recv_bytes = None  # type: ignore
             self._exception_handler = None
 
-            future = self._future
-            runner = self._runner
-            run_task = self._run_task
+            self._send_quit(ctx)
+            self._cleanup_runner(ctx)
 
-            if runner is not None:
+    async def aclose(self, timeout: float = 0.1) -> None:
+        """Async close - waits for runner to finish before cleanup.
+
+        Args:
+            timeout: Maximum time to wait for runner shutdown (default 0.1s)
+        """
+        if self._closed:
+            return
+        self._closed = True
+
+        with self.log_as("aclose") as ctx:
+            self._send_quit(ctx)
+
+            # Wait for the runner task to actually complete (not just QUIT delivery)
+            runner_task = self._runner_task
+            if runner_task is not None and not runner_task.done():
                 try:
-                    ctx.info('sending QUIT to ExecEnv')
-                    self._inbox.put_nowait(QUIT)
-                except BaseException as exc:
-                    ctx.print_exception(exc)
-                # this will give the Rust WASMRunner time to process the QUIT,
-                # but that is optional
-                sleep(0.1)  # TODO: is this necessary? this is a *hard* sleep
+                    await asyncio.wait_for(runner_task, timeout=timeout)
+                    ctx.info('runner task completed; shutdown confirmed')
+                except asyncio.TimeoutError:
+                    ctx.info('shutdown timeout; proceeding with forced close')
+                except asyncio.CancelledError:
+                    ctx.info('runner task was cancelled')
 
-            # call underlying runner close
-            if runner is not None:
-                ctx.log('closing WASMRunner')
-                runner.close()  # type: ignore[misc]
-                self._runner = None
+            # Now safe to clear references and cleanup
+            self._sdk_send_bytes = None  # type: ignore
+            self._sdk_recv_bytes = None  # type: ignore
+            self._exception_handler = None
 
-            # call underlying runner close if available
-            if run_task is not None and not run_task.done():
-                ctx.log('cancelling run task')
-                run_task.cancel()  # type: ignore[misc]
-                self._run_task = None
-
-            if future is not None and not future.done():
-                ctx.info('cancelling Rust future')
-                future.cancel()
-                self._future = None
-
-            if log_stream := self._log_stream:
-                ctx.info('closing log stream')
-                log_stream.close()
-                self._log_stream = None
+            self._cleanup_runner(ctx)
 
     ###############################################################################
 
@@ -386,27 +426,37 @@ class Sandbox(LogBase):
         * one to drain the outbox
         * one to fill the inbox
 
-        It completes when all of these are done, which only occurs if any of them cancel or if the task
-        for the _run() coroutine itself is cancelled (which happens in .close()).
+        The runner task is tracked separately so aclose() can wait for it to complete.
+        When the runner finishes, we cancel the helper tasks.
         """
+        inbox_task: asyncio.Task | None = None
+        outbox_task: asyncio.Task | None = None
+
         try:
             with self.log_as("run") as ctx:
                 async with asyncio.TaskGroup() as tg:
                     name = self.log_name
                     ctx.info('creating fill_inbox task')
-                    tg.create_task(self.fill_inbox(), name=f'{name}.fill_inbox')
+                    inbox_task = tg.create_task(self.fill_inbox(), name=f'{name}.fill_inbox')
                     ctx.info('creating drain_outbox task')
-                    tg.create_task(self.drain_outbox(), name=f'{name}.drain_outbox')
+                    outbox_task = tg.create_task(self.drain_outbox(), name=f'{name}.drain_outbox')
                     # coro if python, future if rust
                     future_or_coro = self.wasm_runner.run_msg_loop()
                     if isinstance(future_or_coro, asyncio.Future):
                         ctx.info("Rust backend")
                         self._future = future_or_coro
+                        # Wrap the future in a task so we can track it
+                        self._runner_task = tg.create_task(
+                            self._await_runner(future_or_coro, inbox_task, outbox_task),
+                            name=f'{name}.runner_wrapper',
+                        )
                     else:
                         ctx.info("Python backend")
                         ctx.info('creating warp_run_msg_loop task')
-                        name = f'{name}.wasm_runner.warp_run_msg_loop'
-                        tg.create_task(future_or_coro, name=name)
+                        self._runner_task = tg.create_task(
+                            self._await_runner(future_or_coro, inbox_task, outbox_task),
+                            name=f'{name}.runner_wrapper',
+                        )
         except* asyncio.CancelledError:
             pass
         except* BaseException as e:
@@ -421,9 +471,26 @@ class Sandbox(LogBase):
                 and self._exception_handler is not None
             ):
                 await self._exception_handler(exc)
-            self.close()
+            await self.aclose()
             self._future = None
             self._run_task = None
+            self._runner_task = None
+
+    async def _await_runner(
+        self,
+        runner_coro,
+        inbox_task: asyncio.Task | None,
+        outbox_task: asyncio.Task | None,
+    ) -> None:
+        """Wrapper that awaits the runner and signals completion."""
+        try:
+            await runner_coro
+        finally:
+            # Runner has finished - cancel helper tasks
+            if inbox_task and not inbox_task.done():
+                inbox_task.cancel()
+            if outbox_task and not outbox_task.done():
+                outbox_task.cancel()
 
     async def fill_inbox(self):
         with self.log_as("fill_inbox") as ctx:
@@ -484,7 +551,7 @@ class Sandbox(LogBase):
             raise error
         value = result.value
         if fmt == 'raw':
-            test = is_bytes
+            test = lambda m: type(m) is Raw
         if test and not test(value):
             raise SandboxError(f'executing {req} gave invalid type {type(value).__name__!r}')
         return value
@@ -497,7 +564,7 @@ class Sandbox(LogBase):
         mid = self._repl_next_mid
         self._repl_next_mid -= 1
 
-        request_msg = FramedRequestMsg(mid=mid, fid=0, data=repl_msg, fmt=fmt, defs=defs)
+        request_msg = FramedRequestMsg(mid=mid, fid=0, request=repl_msg, fmt=fmt, defs=defs)
         request_data = request_msg.to_msgpack()
 
         fut: asyncio.Future[bytes] = self.event_loop.create_future()
@@ -508,13 +575,13 @@ class Sandbox(LogBase):
         ctx.info("awaiting reply")
         response_data = await fut
         response_msg = FramedResponseMsg.from_msgpack(response_data)
-        result = response_msg.data.decode(PURE_CODEC)
+        result = response_msg.result.decode(PURE_CODEC)
         ctx.info("got (decoded) reply:", result)
         return result
 
     async def invocation_return(self, iid: str | int, result: Result):
         with self.log_as("invocation_return_value", iid):
-            result_msg = ResultMsg.encode(PURE_CODEC, result)
+            result_msg = ResultMsg.encode(result, PURE_CODEC)
             future_msg = FutureResultMsg(iid, result_msg)
             data = future_msg.to_msgpack()
             await self._outbox.put(data)
@@ -566,15 +633,14 @@ class Sandbox(LogBase):
 
     async def __send_eval_summary_future_msg(self, summary: ReplEvaluationInfo, iid: str):
         if summary.has_raised_error:
-            raw_bytes = await self.repl_call_method('get_last_exception', fmt='raw')
-            msg_cls = ErrorMsg
+            raw = await self.repl_call_method('get_last_exception', fmt='raw')
+            result_msg = ResultMsg(True, None, raw)
         elif summary.has_return_value:
-            raw_bytes = await self.repl_call_method('get_last_return_value', fmt='raw')
-            msg_cls = ValueMsg
+            raw = await self.repl_call_method('get_last_return_value', fmt='raw')
+            result_msg = ResultMsg(True, raw, None)
         else:
             raise SandboxError(f'last evaluation did not raise an exception or return a value')
-        result_msg = msg_cls(Raw(raw_bytes))  # type: ignore
-        response_msg = FutureResultMsg(fid=iid, data=result_msg)
+        response_msg = FutureResultMsg(fid=iid, result=result_msg)
         payload = response_msg.to_msgpack()
         await self._outbox.put(payload)
         await self._outbox.join()
@@ -606,7 +672,7 @@ class Sandbox(LogBase):
         raw_bytes = await self.repl_call_method('get_var', Scope.USER, key, fmt='raw')
         result_cls = ErrorMsg if is_exc else ValueMsg
         result_msg = result_cls(Raw(raw_bytes))
-        response_msg = FutureResultMsg(fid=fid, data=result_msg)
+        response_msg = FutureResultMsg(fid=fid, result=result_msg)
         payload = response_msg.to_msgpack()
         return payload
 

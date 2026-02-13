@@ -112,7 +112,7 @@ This creates a single provider that matches all models.
 
 ## Issues
 
-Please report bugs, feature requests, and other issues in the [symbolica/agentica-issues](https://github.com/symbolica-ai/agentica-issues) repository.
+Please report bugs, feature requests, and other issues in the [symbolica-ai/agentica-server](https://github.com/symbolica-ai/agentica-server) repository.
 
 ## License
 

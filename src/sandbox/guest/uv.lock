@@ -1,10 +1,11 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.12.0"
 
 [[package]]
 name = "agentica-internal"
-source = { directory = "../../../../common" }
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "msgspec" },
@@ -16,36 +17,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "xxhash" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "msgspec", specifier = ">=0.19.0" },
-    { name = "opentelemetry-api", specifier = ">=1.20.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
-    { name = "rich", specifier = ">=14.1.0" },
-    { name = "trio", specifier = ">=0.31.0" },
-    { name = "typing-extensions", specifier = ">=4.15.0" },
-    { name = "xxhash", specifier = ">=3.5.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "numpy", specifier = ">=2.4.1" },
-    { name = "pandas", specifier = ">=3.0.0" },
-    { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pyright", specifier = ">=1.1.406" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "pytest-asyncio", specifier = ">=1.2.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-subtests", specifier = ">=0.14.2" },
-    { name = "pytest-timeout", specifier = ">=2.4.0" },
-    { name = "ruff", specifier = ">=0.14.5" },
-    { name = "scikit-image", specifier = ">=0.26.0" },
-    { name = "scipy", specifier = ">=1.17.0" },
-    { name = "sympy", specifier = ">=1.14.0" },
-    { name = "vulture", specifier = ">=2.14" },
+sdist = { url = "https://files.pythonhosted.org/packages/6d/79/7292cd9fa626308032f1795813c233dfe7f6c31af115a76ce25e879c6128/agentica_internal-0.4.1.tar.gz", hash = "sha256:6c8a6b472d3dd6480985f69b911d219f487013b94b3fdb9f4bffbb0f8a5b8605", size = 10483975, upload-time = "2026-02-13T21:07:43.444Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/44/5045eb834ce888673a21c7aaff1de7017f916e5ce61488750bc940363202/agentica_internal-0.4.1-py3-none-any.whl", hash = "sha256:60c748a1d9f5e00b0ccb017dff808022d88da5ffcf18a25e4c1b564a9d3c13b1", size = 488575, upload-time = "2026-02-13T21:07:42.017Z" },
 ]
 
 [[package]]
@@ -153,7 +127,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agentica-internal", directory = "../../../../common" },
+    { name = "agentica-internal" },
     { name = "componentize-py", specifier = ">=0.17.2" },
     { name = "rich", specifier = ">=14.1.0" },
     { name = "typeguard", specifier = ">=4.4.4" },
